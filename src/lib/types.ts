@@ -24,6 +24,7 @@ export type Stream = {
   id: string;
   slug: string;
   title: string;
+  description: string | null;
   start_at: string;
   hls_url: string;
   status: StreamStatus;

@@ -4,6 +4,7 @@ import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
 import { ProfileSetup } from "./ProfileSetup";
+import { StreamInfo } from "./StreamInfo";
 import { VideoPlayer } from "./VideoPlayer";
 
 type Props = { stream: Stream | null };
@@ -21,15 +22,20 @@ export function LivePage({ stream }: Props) {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-bg-base md:flex-row">
-      <div className="w-full md:flex-1">
-        <div className="flex h-[40vh] items-center justify-center bg-black md:h-full">
-          <div className="w-full max-w-[1600px]">
+      <div className="flex w-full min-w-0 flex-col md:flex-1">
+        <div className="shrink-0 bg-black">
+          <div className="mx-auto w-full max-w-[1600px]">
             <VideoPlayer stream={stream} />
           </div>
         </div>
+        {stream && (
+          <div className="max-h-[28vh] min-h-0 overflow-y-auto md:max-h-none md:flex-1">
+            <StreamInfo stream={stream} />
+          </div>
+        )}
       </div>
 
-      <div className="flex h-[60vh] w-full flex-col border-t border-bg-border md:h-full md:w-[380px] md:border-l md:border-t-0">
+      <div className="flex min-h-0 w-full flex-1 flex-col border-t border-bg-border md:h-full md:flex-none md:w-[380px] md:border-l md:border-t-0">
         {!stream ? (
           <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
             配信が登録されていません

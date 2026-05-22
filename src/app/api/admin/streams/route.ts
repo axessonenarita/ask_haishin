@@ -45,6 +45,8 @@ export async function POST(req: Request) {
 
   const p = payload as Record<string, unknown>;
   const title = String(p.title ?? "").trim();
+  const description =
+    typeof p.description === "string" ? p.description : "";
   const start_at = String(p.start_at ?? "").trim();
   const hls_url = String(p.hls_url ?? "").trim();
   const status = p.status;
@@ -68,7 +70,14 @@ export async function POST(req: Request) {
     const slug = generateSlug();
     const { data, error } = await supabase
       .from("streams")
-      .insert({ title, start_at, hls_url, status, slug })
+      .insert({
+        title,
+        description: description || null,
+        start_at,
+        hls_url,
+        status,
+        slug,
+      })
       .select()
       .single();
 
