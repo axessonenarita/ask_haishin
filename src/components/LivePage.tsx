@@ -13,6 +13,7 @@ type Props = { stream: Stream | null };
 export function LivePage({ stream }: Props) {
   const { profile, loaded, save } = useProfile();
   const [playbackEnded, setPlaybackEnded] = useState(false);
+  const [chatExpanded, setChatExpanded] = useState(false);
 
   useEffect(() => {
     setPlaybackEnded(false);
@@ -20,6 +21,10 @@ export function LivePage({ stream }: Props) {
 
   const handlePlaybackEnded = useCallback(() => {
     setPlaybackEnded(true);
+  }, []);
+
+  const toggleChatExpanded = useCallback(() => {
+    setChatExpanded((v) => !v);
   }, []);
 
   if (!loaded) {
@@ -32,7 +37,11 @@ export function LivePage({ stream }: Props) {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-bg-base md:flex-row">
-      <div className="flex w-full min-w-0 flex-col md:flex-1">
+      <div
+        className={`w-full min-w-0 flex-col md:flex md:flex-1 ${
+          chatExpanded ? "hidden" : "flex"
+        }`}
+      >
         <div className="shrink-0 bg-black">
           <div className="mx-auto w-full max-w-[1600px]">
             <VideoPlayer
@@ -59,6 +68,8 @@ export function LivePage({ stream }: Props) {
             profile={profile}
             streamId={stream.id}
             onProfileChange={save}
+            chatExpanded={chatExpanded}
+            onToggleExpand={toggleChatExpanded}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
