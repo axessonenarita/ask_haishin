@@ -1,13 +1,13 @@
 # ask_haishin
 
-ログイン不要のライブチャットMVP。Cloudflare Stream の HLS を擬似ライブ再生し、Supabase Realtime でチャットを同期する。
+ログイン不要のライブチャットMVP。Bunny Stream の HLS を擬似ライブ再生し、Supabase Realtime でチャットを同期する。
 
 ## 技術構成
 
 - Next.js (App Router) + TypeScript
 - Tailwind CSS
 - Supabase (Postgres + Realtime)
-- Cloudflare Stream（MP4 をアップするだけで HLS 配信。`hls.js` で擬似ライブ再生）
+- Bunny Stream（MP4 をアップするだけで HLS 配信。`hls.js` で擬似ライブ再生）
 - 管理画面は Basic 認証 (middleware)
 
 ## セットアップ
@@ -36,29 +36,31 @@ Supabase SQL Editor で以下を順に実行する。
 1. `supabase/migrations/0001_init.sql` — `messages` テーブル・RLS・Realtime
 2. `supabase/migrations/0002_streams.sql` — `streams` テーブル・RLS
 
-### 配信動画の準備（Cloudflare Stream）
+### 配信動画の準備（Bunny Stream）
 
-1. Cloudflare ダッシュボードで **Stream** を有効化
-2. **Stream → Videos → Upload Video** から MP4 をアップロード
-3. ステータスが `Ready` になったら動画詳細の **Embed → Custom player** タブで HLS manifest URL をコピー
+1. https://bunny.net にサインアップ
+2. ダッシュボード **Stream → Add Stream Library** で Library を作成
+   - レプリケーションリージョンに「Asia (Japan)」を含めると国内視聴が高速
+3. Library を開いて **Upload Videos** から MP4 をアップロード
+4. ステータスが `Finished` になったら動画詳細の **API** タブで HLS URL をコピー
 
    ```
-   https://customer-<accountcode>.cloudflarestream.com/<videoUID>/manifest/video.m3u8
+   https://vz-<library-hash>.b-cdn.net/<video-guid>/playlist.m3u8
    ```
 
-4. Supabase の `streams` テーブルに行を追加
+5. Supabase の `streams` テーブルに行を追加
 
    ```sql
    insert into streams (title, start_at, hls_url, status)
    values (
      '5月22日 配信',
      '2026-05-22 20:00:00+09',
-     'https://customer-xxxxxx.cloudflarestream.com/abcdef0123456789/manifest/video.m3u8',
+     'https://vz-abcdef12-345.b-cdn.net/01234567-89ab-cdef-0123-456789abcdef/playlist.m3u8',
      'waiting'
    );
    ```
 
-Stream 側で HLS 変換・CDN 配信・CORS 設定がすべて自動で行われるため、ffmpeg やストレージ運用は不要。
+Bunny 側で HLS 変換・CDN 配信・CORS（`Access-Control-Allow-Origin: *`）がすべて自動で行われるため、ffmpeg やストレージ運用は不要。
 
 ## 擬似ライブの仕様
 
