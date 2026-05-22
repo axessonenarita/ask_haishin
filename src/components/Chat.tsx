@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { supabase } from "@/lib/supabase/client";
 import {
   INITIAL_LOAD_LIMIT,
@@ -37,6 +43,7 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const shouldScrollOnUpdateRef = useRef(false);
 
   const isNearBottom = useCallback((): boolean => {
     const el = listRef.current;
@@ -47,13 +54,18 @@ export function Chat({
     );
   }, []);
 
-  const scrollToBottom = useCallback(() => {
-    requestAnimationFrame(() => {
-      const el = listRef.current;
-      if (!el) return;
-      el.scrollTop = el.scrollHeight;
-      setUnreadCount(0);
-    });
+  useLayoutEffect(() => {
+    if (!shouldScrollOnUpdateRef.current) return;
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    shouldScrollOnUpdateRef.current = false;
+    setUnreadCount(0);
+  }, [messages]);
+
+  const jumpToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setUnreadCount(0);
   }, []);
 
   const handleScroll = useCallback(() => {
@@ -82,8 +94,8 @@ export function Chat({
         return;
       }
       const list = (data ?? []).slice().reverse() as Message[];
+      shouldScrollOnUpdateRef.current = true;
       setMessages(list);
-      scrollToBottom();
     })();
 
     const channel = supabase
@@ -100,18 +112,15 @@ export function Chat({
           const m = payload.new as Message;
           if (m.deleted) return;
           const wasAtBottom = isNearBottom();
-          let appended = false;
-          setMessages((prev) => {
-            if (prev.some((x) => x.id === m.id)) return prev;
-            appended = true;
-            return [...prev, m];
-          });
-          if (!appended) return;
           if (wasAtBottom) {
-            scrollToBottom();
+            shouldScrollOnUpdateRef.current = true;
           } else {
             setUnreadCount((c) => c + 1);
           }
+          setMessages((prev) => {
+            if (prev.some((x) => x.id === m.id)) return prev;
+            return [...prev, m];
+          });
         },
       )
       .on(
@@ -137,7 +146,7 @@ export function Chat({
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [scrollToBottom, streamId, isNearBottom]);
+  }, [streamId, isNearBottom]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -182,10 +191,10 @@ export function Chat({
       localStorage.setItem(LS_KEYS.lastPostAt, String(now));
       setBody("");
       if (wasAtBottom) {
-        scrollToBottom();
+        shouldScrollOnUpdateRef.current = true;
       }
     },
-    [body, profile, streamId, scrollToBottom, isNearBottom],
+    [body, profile, streamId, isNearBottom],
   );
 
   return (
@@ -233,7 +242,7 @@ export function Chat({
         {unreadCount > 0 && (
           <button
             type="button"
-            onClick={scrollToBottom}
+            onClick={jumpToBottom}
             className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
           >
             ↓ 新着 {unreadCount}件
