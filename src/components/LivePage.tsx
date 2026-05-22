@@ -1,16 +1,37 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
+import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
 import { ProfileSetup } from "./ProfileSetup";
 import { VideoPlayer } from "./VideoPlayer";
 
-type Props = { embedUrl: string | undefined };
-
-export function LivePage({ embedUrl }: Props) {
+export function LivePage() {
   const { profile, loaded, save } = useProfile();
+  const [stream, setStream] = useState<Stream | null>(null);
+  const [streamLoaded, setStreamLoaded] = useState(false);
 
-  if (!loaded) {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("streams")
+        .select("*")
+        .order("start_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      setStream((data as Stream | null) ?? null);
+      setStreamLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!loaded || !streamLoaded) {
     return (
       <div className="flex h-screen items-center justify-center text-neutral-500">
         読み込み中…
@@ -23,7 +44,7 @@ export function LivePage({ embedUrl }: Props) {
       <div className="w-full md:flex-1">
         <div className="flex h-[40vh] items-center justify-center bg-black md:h-full">
           <div className="w-full max-w-[1600px]">
-            <VideoPlayer embedUrl={embedUrl} />
+            <VideoPlayer stream={stream} />
           </div>
         </div>
       </div>
