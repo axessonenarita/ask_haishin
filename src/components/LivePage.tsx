@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
@@ -11,6 +12,15 @@ type Props = { stream: Stream | null };
 
 export function LivePage({ stream }: Props) {
   const { profile, loaded, save } = useProfile();
+  const [playbackEnded, setPlaybackEnded] = useState(false);
+
+  useEffect(() => {
+    setPlaybackEnded(false);
+  }, [stream?.id]);
+
+  const handlePlaybackEnded = useCallback(() => {
+    setPlaybackEnded(true);
+  }, []);
 
   if (!loaded) {
     return (
@@ -25,12 +35,16 @@ export function LivePage({ stream }: Props) {
       <div className="flex w-full min-w-0 flex-col md:flex-1">
         <div className="shrink-0 bg-black">
           <div className="mx-auto w-full max-w-[1600px]">
-            <VideoPlayer stream={stream} />
+            <VideoPlayer
+              stream={stream}
+              playbackEnded={playbackEnded}
+              onPlaybackEnded={handlePlaybackEnded}
+            />
           </div>
         </div>
         {stream && (
           <div className="max-h-[28vh] min-h-0 overflow-y-auto md:max-h-none md:flex-1">
-            <StreamInfo stream={stream} />
+            <StreamInfo stream={stream} playbackEnded={playbackEnded} />
           </div>
         )}
       </div>
