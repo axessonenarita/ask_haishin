@@ -20,7 +20,11 @@ export function LivePage({ stream }: Props) {
 
   const handlePlaybackEnded = useCallback(() => {
     setPlaybackEnded(true);
-  }, []);
+    if (!stream || stream.status === "ended") return;
+    void fetch(`/api/streams/${stream.slug}/end`, { method: "POST" }).catch(
+      () => {},
+    );
+  }, [stream]);
 
   if (!loaded) {
     return (
