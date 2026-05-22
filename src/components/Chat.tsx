@@ -19,9 +19,17 @@ type Props = {
   profile: UserProfile;
   streamId: string;
   onProfileChange: (p: UserProfile) => void;
+  chatExpanded?: boolean;
+  onToggleExpand?: () => void;
 };
 
-export function Chat({ profile, streamId, onProfileChange }: Props) {
+export function Chat({
+  profile,
+  streamId,
+  onProfileChange,
+  chatExpanded,
+  onToggleExpand,
+}: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -184,13 +192,25 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
     <div className="flex h-full flex-col bg-bg-panel">
       <div className="flex items-center justify-between border-b border-bg-border px-3 py-2">
         <div className="text-sm font-bold text-neutral-200">ライブチャット</div>
-        <button
-          type="button"
-          onClick={() => setShowSettings(true)}
-          className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
-        >
-          設定変更
-        </button>
+        <div className="flex items-center gap-2">
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
+              aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
+            >
+              {chatExpanded ? "縮小" : "拡大"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowSettings(true)}
+            className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+          >
+            設定変更
+          </button>
+        </div>
       </div>
 
       <div className="border-b border-bg-border px-3 py-2 text-[11px] leading-snug text-neutral-400">
