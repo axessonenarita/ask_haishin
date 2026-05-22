@@ -250,11 +250,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         onClick={showControls}
       />
 
-      <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-xs font-bold">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-        <span>PREMIERE</span>
-      </div>
-
       {!joined && (
         <button
           type="button"
