@@ -44,6 +44,10 @@ export async function PATCH(
     }
     update.title = t;
   }
+  if (p.description !== undefined) {
+    const d = typeof p.description === "string" ? p.description : "";
+    update.description = d || null;
+  }
   if (p.start_at !== undefined) {
     const s = String(p.start_at).trim();
     if (!s || Number.isNaN(Date.parse(s))) {

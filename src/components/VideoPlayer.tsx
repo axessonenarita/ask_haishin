@@ -1,22 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Stream, StreamStatus } from "@/lib/types";
+import type { Stream } from "@/lib/types";
+import { effectiveStreamStatus } from "@/lib/streamStatus";
+import { getServerNow, useServerTime } from "@/lib/useServerTime";
 
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 5;
 const CONTROLS_HIDE_DELAY_MS = 2500;
 
-type Props = { stream: Stream | null };
+type Props = {
+  stream: Stream | null;
+  playbackEnded?: boolean;
+  onPlaybackEnded?: () => void;
+};
 
 function elapsedSeconds(startAtIso: string, nowMs: number): number {
   return (nowMs - new Date(startAtIso).getTime()) / 1000;
-}
-
-function effectiveStatus(stream: Stream, nowMs: number): StreamStatus {
-  if (stream.status === "ended") return "ended";
-  if (nowMs < new Date(stream.start_at).getTime()) return "waiting";
-  return "live";
 }
 
 function formatStartAt(iso: string): string {
@@ -43,22 +43,17 @@ function formatCountdown(diffMs: number): string {
   return `${s}秒`;
 }
 
-export function VideoPlayer({ stream }: Props) {
+export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [now, setNow] = useState(() => Date.now());
+  const now = useServerTime();
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -121,13 +116,16 @@ export function VideoPlayer({ stream }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!stream || !joined) return;
+    if (!stream || !joined || playbackEnded) return;
     const video = videoRef.current;
     if (!video) return;
 
     let cancelled = false;
     let hlsInstance: { destroy: () => void } | null = null;
     let driftTimer: ReturnType<typeof setInterval> | null = null;
+
+    const handleEnded = () => onPlaybackEnded?.();
+    video.addEventListener("ended", handleEnded);
 
     const startPlayback = async () => {
       const src = stream.hls_url;
@@ -155,7 +153,10 @@ export function VideoPlayer({ stream }: Props) {
       }
 
       const seekToLive = () => {
-        const target = Math.max(0, elapsedSeconds(stream.start_at, Date.now()));
+        const target = Math.max(
+          0,
+          elapsedSeconds(stream.start_at, getServerNow()),
+        );
         if (Number.isFinite(target)) {
           video.currentTime = target;
         }
@@ -171,7 +172,7 @@ export function VideoPlayer({ stream }: Props) {
 
       driftTimer = setInterval(() => {
         if (!video.duration || video.paused) return;
-        const expected = elapsedSeconds(stream.start_at, Date.now());
+        const expected = elapsedSeconds(stream.start_at, getServerNow());
         if (expected < 0) return;
         const diff = expected - video.currentTime;
         if (Math.abs(diff) > RESYNC_THRESHOLD_S) {
@@ -186,10 +187,11 @@ export function VideoPlayer({ stream }: Props) {
       cancelled = true;
       if (driftTimer) clearInterval(driftTimer);
       if (hlsInstance) hlsInstance.destroy();
+      video.removeEventListener("ended", handleEnded);
       video.removeAttribute("src");
       video.load();
     };
-  }, [stream, joined]);
+  }, [stream, joined, playbackEnded, onPlaybackEnded]);
 
   if (!stream) {
     return (
@@ -201,7 +203,7 @@ export function VideoPlayer({ stream }: Props) {
     );
   }
 
-  const status = effectiveStatus(stream, now);
+  const status = effectiveStreamStatus(stream, now, playbackEnded);
 
   if (status === "waiting") {
     const diff = new Date(stream.start_at).getTime() - now;
@@ -247,11 +249,6 @@ export function VideoPlayer({ stream }: Props) {
         className="absolute inset-0 h-full w-full"
         onClick={showControls}
       />
-
-      <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-1.5 rounded bg-black/60 px-2 py-1 text-xs font-bold">
-        <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-        <span>PREMIERE</span>
-      </div>
 
       {!joined && (
         <button

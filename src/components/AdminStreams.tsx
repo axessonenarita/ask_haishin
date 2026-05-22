@@ -40,6 +40,7 @@ function defaultStartLocal(): string {
 
 type FormState = {
   title: string;
+  description: string;
   startLocal: string;
   hls_url: string;
   status: StreamStatus;
@@ -52,6 +53,7 @@ export function AdminStreams() {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({
     title: "",
+    description: "",
     startLocal: defaultStartLocal(),
     hls_url: "",
     status: "waiting",
@@ -117,6 +119,7 @@ export function AdminStreams() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: form.title.trim(),
+          description: form.description,
           start_at,
           hls_url: form.hls_url.trim(),
           status: form.status,
@@ -130,6 +133,7 @@ export function AdminStreams() {
       }
       setForm({
         title: "",
+        description: "",
         startLocal: defaultStartLocal(),
         hls_url: "",
         status: "waiting",
@@ -197,6 +201,17 @@ export function AdminStreams() {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="例：5月22日 配信"
+            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
+          />
+        </label>
+
+        <label className="text-sm md:col-span-2">
+          <span className="mb-1 block text-neutral-300">概要（任意）</span>
+          <textarea
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            rows={3}
+            placeholder="本日の配信内容、テーマ、注意事項など"
             className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
           />
         </label>
@@ -308,6 +323,20 @@ export function AdminStreams() {
                         </option>
                       ))}
                     </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = window.prompt(
+                          "概要を編集",
+                          s.description ?? "",
+                        );
+                        if (next === null) return;
+                        void updateField(s.id, { description: next });
+                      }}
+                      className="rounded-md bg-bg-input px-2 py-1 text-xs hover:bg-neutral-700"
+                    >
+                      概要編集
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleDelete(s.id)}
