@@ -3,6 +3,7 @@
 import type { Stream, StreamStatus } from "@/lib/types";
 import { effectiveStreamStatus } from "@/lib/streamStatus";
 import { useServerTime } from "@/lib/useServerTime";
+import { useStreamPresence } from "@/lib/useStreamPresence";
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
   waiting: "開始前",
@@ -50,6 +51,7 @@ type Props = {
 
 export function StreamInfo({ stream, playbackEnded }: Props) {
   const now = useServerTime();
+  const viewerCount = useStreamPresence(stream.id);
   const status = effectiveStreamStatus(stream, now, playbackEnded);
   const startMs = new Date(stream.start_at).getTime();
 
@@ -71,6 +73,15 @@ export function StreamInfo({ stream, playbackEnded }: Props) {
             開始まで <span className="font-mono">{formatDuration(startMs - now)}</span>
           </span>
         )}
+        {viewerCount > 0 && (
+          <span
+            className="inline-flex items-center gap-1 text-xs text-neutral-300"
+            title="同時視聴者数"
+          >
+            <EyeIcon />
+            {viewerCount.toLocaleString()}
+          </span>
+        )}
       </div>
 
       <h1 className="mt-1.5 text-base font-bold leading-tight md:text-lg">
@@ -87,5 +98,24 @@ export function StreamInfo({ stream, playbackEnded }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
