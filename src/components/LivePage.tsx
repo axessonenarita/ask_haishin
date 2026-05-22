@@ -16,14 +16,31 @@ export function LivePage() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const active = await supabase
+        .from("streams")
+        .select("*")
+        .neq("status", "ended")
+        .order("start_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (active.data) {
+        setStream(active.data as Stream);
+        setStreamLoaded(true);
+        return;
+      }
+
+      const ended = await supabase
         .from("streams")
         .select("*")
         .order("start_at", { ascending: false })
         .limit(1)
         .maybeSingle();
+
       if (cancelled) return;
-      setStream((data as Stream | null) ?? null);
+      setStream((ended.data as Stream | null) ?? null);
       setStreamLoaded(true);
     })();
     return () => {
