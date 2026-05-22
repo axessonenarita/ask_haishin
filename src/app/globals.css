@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  background-color: #0f0f10;
+  color: #e5e5e5;
+  height: 100%;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic",
+    "Segoe UI", sans-serif;
+}
+
+/* Hide scrollbar but keep functionality on chat list */
+.chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.chat-scroll::-webkit-scrollbar-thumb {
+  background-color: #333;
+  border-radius: 3px;
+}
+.chat-scroll::-webkit-scrollbar-track {
+  background-color: transparent;
+}
