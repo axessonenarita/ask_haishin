@@ -286,6 +286,7 @@ export function AdminStreams() {
                     <div className="mt-1 text-xs text-neutral-400">
                       開始：{new Date(s.start_at).toLocaleString("ja-JP")}
                     </div>
+                    <StreamUrl slug={s.slug} />
                     <div className="mt-1 break-all text-[11px] text-neutral-500">
                       {s.hls_url}
                     </div>
@@ -326,5 +327,42 @@ export function AdminStreams() {
         視聴ページには「終了していない配信のうち開始日時が最も近いもの」を1件表示します。すべて終了済みの場合は最新の1件が「配信は終了しました」として表示されます。
       </p>
     </section>
+  );
+}
+
+function StreamUrl({ slug }: { slug: string }) {
+  const [copied, setCopied] = useState(false);
+  const path = `/live/${slug}`;
+  const href =
+    typeof window !== "undefined" ? `${window.location.origin}${path}` : path;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(href);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="mt-1 flex items-center gap-2 text-xs text-neutral-300">
+      <a
+        href={path}
+        target="_blank"
+        rel="noreferrer"
+        className="break-all text-blue-400 hover:underline"
+      >
+        {path}
+      </a>
+      <button
+        type="button"
+        onClick={copy}
+        className="shrink-0 rounded bg-bg-input px-2 py-0.5 text-[10px] hover:bg-neutral-700"
+      >
+        {copied ? "コピー済" : "URLコピー"}
+      </button>
+    </div>
   );
 }
