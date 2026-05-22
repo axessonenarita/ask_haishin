@@ -11,7 +11,7 @@ import {
   getColorHex,
   type Role,
 } from "@/lib/constants";
-import type { Message } from "@/lib/types";
+import type { Message, Stream } from "@/lib/types";
 
 type FormState = {
   nickname: string;
@@ -19,6 +19,7 @@ type FormState = {
   color: string;
   role: Role;
   body: string;
+  stream_id: string;
 };
 
 const initialForm: FormState = {
@@ -27,10 +28,12 @@ const initialForm: FormState = {
   color: COLORS[0].id,
   role: "admin",
   body: "",
+  stream_id: "",
 };
 
 export function AdminMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
@@ -49,11 +52,25 @@ export function AdminMessages() {
     setLoading(false);
   }, []);
 
+  const loadStreams = useCallback(async () => {
+    const res = await fetch("/api/admin/streams", { cache: "no-store" });
+    if (!res.ok) return;
+    const json = (await res.json()) as { streams: Stream[] };
+    setStreams(json.streams);
+    setForm((f) => {
+      if (f.stream_id) return f;
+      const active = json.streams.find((s) => s.status !== "ended");
+      const fallback = active ?? json.streams[0];
+      return fallback ? { ...f, stream_id: fallback.id } : f;
+    });
+  }, []);
+
   useEffect(() => {
     void load();
+    void loadStreams();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
-  }, [load]);
+  }, [load, loadStreams]);
 
   const handlePost = useCallback(
     async (e: React.FormEvent) => {
@@ -61,6 +78,10 @@ export function AdminMessages() {
       setError(null);
       if (!form.nickname.trim() || !form.body.trim()) {
         setError("ニックネームと本文は必須です");
+        return;
+      }
+      if (!form.stream_id) {
+        setError("対象配信を選択してください");
         return;
       }
       setSubmitting(true);
@@ -101,6 +122,24 @@ export function AdminMessages() {
       <section className="mb-8 rounded-lg bg-bg-panel p-4">
         <h2 className="mb-3 font-bold">運営 / STAFF コメント投稿</h2>
         <form onSubmit={handlePost} className="grid gap-3 md:grid-cols-2">
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-neutral-300">対象配信</span>
+            <select
+              value={form.stream_id}
+              onChange={(e) =>
+                setForm({ ...form, stream_id: e.target.value })
+              }
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
+            >
+              <option value="">— 配信を選択 —</option>
+              {streams.map((s) => (
+                <option key={s.id} value={s.id}>
+                  [{s.status}] {s.title}（/live/{s.slug}）
+                </option>
+              ))}
+            </select>
+          </label>
+
           <label className="text-sm">
             <span className="mb-1 block text-neutral-300">ロール</span>
             <select
@@ -204,7 +243,9 @@ export function AdminMessages() {
           <div className="text-neutral-400">読み込み中…</div>
         ) : (
           <ul className="divide-y divide-bg-border">
-            {messages.map((m) => (
+            {messages.map((m) => {
+              const stream = streams.find((s) => s.id === m.stream_id);
+              return (
               <li
                 key={m.id}
                 className={`flex items-start gap-3 py-2 ${
@@ -214,6 +255,9 @@ export function AdminMessages() {
                 <div className="flex-1 break-words text-sm">
                   <div className="text-[11px] text-neutral-500">
                     {new Date(m.created_at).toLocaleString("ja-JP")} ・ {m.role}
+                    {stream && ` ・ ${stream.title}`}
+                    {!stream && m.stream_id && " ・ (削除済み配信)"}
+                    {!m.stream_id && " ・ (配信なし)"}
                     {m.deleted && " ・ 削除済み"}
                   </div>
                   <div>
@@ -238,7 +282,8 @@ export function AdminMessages() {
                   </button>
                 )}
               </li>
-            ))}
+              );
+            })}
             {messages.length === 0 && (
               <li className="py-2 text-neutral-400">コメントがありません</li>
             )}

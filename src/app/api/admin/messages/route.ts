@@ -38,6 +38,7 @@ export async function POST(req: Request) {
   const avatar = p.avatar;
   const color = p.color;
   const role = p.role as Role;
+  const stream_id = typeof p.stream_id === "string" ? p.stream_id : "";
 
   if (!nickname) {
     return NextResponse.json({ error: "nickname required" }, { status: 400 });
@@ -54,11 +55,14 @@ export async function POST(req: Request) {
   if (!(ROLES as readonly string[]).includes(role)) {
     return NextResponse.json({ error: "invalid role" }, { status: 400 });
   }
+  if (!stream_id) {
+    return NextResponse.json({ error: "stream_id required" }, { status: 400 });
+  }
 
   const supabase = getAdminClient();
   const { data, error } = await supabase
     .from("messages")
-    .insert({ nickname, avatar, color, body, role, deleted: false })
+    .insert({ nickname, avatar, color, body, role, deleted: false, stream_id })
     .select()
     .single();
 

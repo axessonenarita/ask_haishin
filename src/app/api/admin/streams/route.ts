@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getAdminClient } from "@/lib/supabase/admin";
+import { generateSlug } from "@/lib/slug";
 import type { StreamStatus } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+const SLUG_RETRY = 5;
 
 const STATUSES: readonly StreamStatus[] = ["waiting", "live", "ended"];
 
@@ -60,14 +63,25 @@ export async function POST(req: Request) {
   }
 
   const supabase = getAdminClient();
-  const { data, error } = await supabase
-    .from("streams")
-    .insert({ title, start_at, hls_url, status })
-    .select()
-    .single();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  for (let i = 0; i < SLUG_RETRY; i++) {
+    const slug = generateSlug();
+    const { data, error } = await supabase
+      .from("streams")
+      .insert({ title, start_at, hls_url, status, slug })
+      .select()
+      .single();
+
+    if (!error) {
+      return NextResponse.json({ stream: data });
+    }
+    if (error.code !== "23505") {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
   }
-  return NextResponse.json({ stream: data });
+
+  return NextResponse.json(
+    { error: "slug collision, retry" },
+    { status: 500 },
+  );
 }

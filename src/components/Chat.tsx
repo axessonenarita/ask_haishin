@@ -15,10 +15,11 @@ import { ProfileSetup } from "./ProfileSetup";
 
 type Props = {
   profile: UserProfile;
+  streamId: string;
   onProfileChange: (p: UserProfile) => void;
 };
 
-export function Chat({ profile, onProfileChange }: Props) {
+export function Chat({ profile, streamId, onProfileChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -34,12 +35,14 @@ export function Chat({ profile, onProfileChange }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setMessages([]);
 
     (async () => {
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .eq("deleted", false)
+        .eq("stream_id", streamId)
         .order("created_at", { ascending: false })
         .limit(INITIAL_LOAD_LIMIT);
 
@@ -54,10 +57,15 @@ export function Chat({ profile, onProfileChange }: Props) {
     })();
 
     const channel = supabase
-      .channel("messages-realtime")
+      .channel(`messages-realtime-${streamId}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages" },
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `stream_id=eq.${streamId}`,
+        },
         (payload) => {
           const m = payload.new as Message;
           if (m.deleted) return;
@@ -70,7 +78,12 @@ export function Chat({ profile, onProfileChange }: Props) {
       )
       .on(
         "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "messages" },
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "messages",
+          filter: `stream_id=eq.${streamId}`,
+        },
         (payload) => {
           const m = payload.new as Message;
           setMessages((prev) =>
@@ -86,7 +99,7 @@ export function Chat({ profile, onProfileChange }: Props) {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [scrollToBottom]);
+  }, [scrollToBottom, streamId]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -118,6 +131,7 @@ export function Chat({ profile, onProfileChange }: Props) {
         body: trimmed,
         role: "user",
         deleted: false,
+        stream_id: streamId,
       });
       setSending(false);
 
@@ -129,7 +143,7 @@ export function Chat({ profile, onProfileChange }: Props) {
       localStorage.setItem(LS_KEYS.lastPostAt, String(now));
       setBody("");
     },
-    [body, profile],
+    [body, profile, streamId],
   );
 
   return (
