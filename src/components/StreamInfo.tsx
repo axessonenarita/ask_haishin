@@ -1,6 +1,7 @@
 "use client";
 
 import type { Stream, StreamStatus } from "@/lib/types";
+import { effectiveStreamStatus } from "@/lib/streamStatus";
 import { useServerTime } from "@/lib/useServerTime";
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
@@ -14,12 +15,6 @@ const STATUS_BADGE: Record<StreamStatus, string> = {
   live: "bg-red-600 text-white",
   ended: "bg-neutral-800 text-neutral-300",
 };
-
-function effectiveStatus(stream: Stream, nowMs: number): StreamStatus {
-  if (stream.status === "ended") return "ended";
-  if (nowMs < new Date(stream.start_at).getTime()) return "waiting";
-  return "live";
-}
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -48,9 +43,14 @@ function formatDateTime(iso: string): string {
   }
 }
 
-export function StreamInfo({ stream }: { stream: Stream }) {
+type Props = {
+  stream: Stream;
+  playbackEnded?: boolean;
+};
+
+export function StreamInfo({ stream, playbackEnded }: Props) {
   const now = useServerTime();
-  const status = effectiveStatus(stream, now);
+  const status = effectiveStreamStatus(stream, now, playbackEnded);
   const startMs = new Date(stream.start_at).getTime();
 
   return (
