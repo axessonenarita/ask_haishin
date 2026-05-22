@@ -13,6 +13,8 @@ import type { Message, UserProfile } from "@/lib/types";
 import { MessageItem } from "./MessageItem";
 import { ProfileSetup } from "./ProfileSetup";
 
+const NEAR_BOTTOM_THRESHOLD_PX = 80;
+
 type Props = {
   profile: UserProfile;
   streamId: string;
@@ -25,17 +27,38 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+
+  const isNearBottom = useCallback((): boolean => {
+    const el = listRef.current;
+    if (!el) return true;
+    return (
+      el.scrollHeight - el.scrollTop - el.clientHeight <=
+      NEAR_BOTTOM_THRESHOLD_PX
+    );
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
+    isAtBottomRef.current = true;
+    setUnreadCount(0);
   }, []);
+
+  const handleScroll = useCallback(() => {
+    const atBottom = isNearBottom();
+    isAtBottomRef.current = atBottom;
+    if (atBottom) setUnreadCount(0);
+  }, [isNearBottom]);
 
   useEffect(() => {
     let cancelled = false;
     setMessages([]);
+    setUnreadCount(0);
+    isAtBottomRef.current = true;
 
     (async () => {
       const { data, error } = await supabase
@@ -69,11 +92,18 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
         (payload) => {
           const m = payload.new as Message;
           if (m.deleted) return;
+          let appended = false;
           setMessages((prev) => {
             if (prev.some((x) => x.id === m.id)) return prev;
+            appended = true;
             return [...prev, m];
           });
-          setTimeout(scrollToBottom, 0);
+          if (!appended) return;
+          if (isAtBottomRef.current) {
+            setTimeout(scrollToBottom, 0);
+          } else {
+            setUnreadCount((c) => c + 1);
+          }
         },
       )
       .on(
@@ -124,6 +154,7 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
       }
 
       setSending(true);
+      const wasAtBottom = isAtBottomRef.current;
       const { error: insertError } = await supabase.from("messages").insert({
         nickname: profile.nickname,
         avatar: profile.avatar,
@@ -142,8 +173,11 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
 
       localStorage.setItem(LS_KEYS.lastPostAt, String(now));
       setBody("");
+      if (wasAtBottom) {
+        setTimeout(scrollToBottom, 0);
+      }
     },
-    [body, profile, streamId],
+    [body, profile, streamId, scrollToBottom],
   );
 
   return (
@@ -165,13 +199,26 @@ export function Chat({ profile, streamId, onProfileChange }: Props) {
         荒らし・なりすまし・不適切投稿は運営判断で削除します。
       </div>
 
-      <div
-        ref={listRef}
-        className="chat-scroll flex-1 overflow-y-auto py-2"
-      >
-        {messages.map((m) => (
-          <MessageItem key={m.id} message={m} />
-        ))}
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={listRef}
+          onScroll={handleScroll}
+          className="chat-scroll absolute inset-0 overflow-y-auto py-2"
+        >
+          {messages.map((m) => (
+            <MessageItem key={m.id} message={m} />
+          ))}
+        </div>
+
+        {unreadCount > 0 && (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+          >
+            ↓ 新着 {unreadCount}件
+          </button>
+        )}
       </div>
 
       {error && (
