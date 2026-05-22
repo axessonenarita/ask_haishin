@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import type { Stream, StreamStatus } from "@/lib/types";
+import { useServerTime } from "@/lib/useServerTime";
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
   waiting: "開始前",
@@ -49,13 +49,7 @@ function formatDateTime(iso: string): string {
 }
 
 export function StreamInfo({ stream }: { stream: Stream }) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
+  const now = useServerTime();
   const status = effectiveStatus(stream, now);
   const startMs = new Date(stream.start_at).getTime();
 
