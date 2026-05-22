@@ -16,3 +16,13 @@ export type UserProfile = {
   avatar: string;
   color: string;
 };
+
+export type StreamStatus = "waiting" | "live" | "ended";
+
+export type Stream = {
+  id: string;
+  title: string;
+  start_at: string;
+  hls_url: string;
+  status: StreamStatus;
+};
