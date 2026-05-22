@@ -37,7 +37,6 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
-  const isAtBottomRef = useRef(true);
 
   const isNearBottom = useCallback((): boolean => {
     const el = listRef.current;
@@ -49,24 +48,24 @@ export function Chat({
   }, []);
 
   const scrollToBottom = useCallback(() => {
-    const el = listRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    isAtBottomRef.current = true;
-    setUnreadCount(0);
+    requestAnimationFrame(() => {
+      const el = listRef.current;
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+      setUnreadCount(0);
+    });
   }, []);
 
   const handleScroll = useCallback(() => {
-    const atBottom = isNearBottom();
-    isAtBottomRef.current = atBottom;
-    if (atBottom) setUnreadCount(0);
+    if (isNearBottom()) {
+      setUnreadCount(0);
+    }
   }, [isNearBottom]);
 
   useEffect(() => {
     let cancelled = false;
     setMessages([]);
     setUnreadCount(0);
-    isAtBottomRef.current = true;
 
     (async () => {
       const { data, error } = await supabase
@@ -84,7 +83,7 @@ export function Chat({
       }
       const list = (data ?? []).slice().reverse() as Message[];
       setMessages(list);
-      setTimeout(scrollToBottom, 0);
+      scrollToBottom();
     })();
 
     const channel = supabase
@@ -100,6 +99,7 @@ export function Chat({
         (payload) => {
           const m = payload.new as Message;
           if (m.deleted) return;
+          const wasAtBottom = isNearBottom();
           let appended = false;
           setMessages((prev) => {
             if (prev.some((x) => x.id === m.id)) return prev;
@@ -107,8 +107,8 @@ export function Chat({
             return [...prev, m];
           });
           if (!appended) return;
-          if (isAtBottomRef.current) {
-            setTimeout(scrollToBottom, 0);
+          if (wasAtBottom) {
+            scrollToBottom();
           } else {
             setUnreadCount((c) => c + 1);
           }
@@ -137,7 +137,7 @@ export function Chat({
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [scrollToBottom, streamId]);
+  }, [scrollToBottom, streamId, isNearBottom]);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -161,8 +161,8 @@ export function Chat({
         return;
       }
 
+      const wasAtBottom = isNearBottom();
       setSending(true);
-      const wasAtBottom = isAtBottomRef.current;
       const { error: insertError } = await supabase.from("messages").insert({
         nickname: profile.nickname,
         avatar: profile.avatar,
@@ -182,10 +182,10 @@ export function Chat({
       localStorage.setItem(LS_KEYS.lastPostAt, String(now));
       setBody("");
       if (wasAtBottom) {
-        setTimeout(scrollToBottom, 0);
+        scrollToBottom();
       }
     },
-    [body, profile, streamId, scrollToBottom],
+    [body, profile, streamId, scrollToBottom, isNearBottom],
   );
 
   return (
