@@ -192,6 +192,23 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     };
     video.addEventListener("ended", handleEnded);
 
+    const handleSeeked = () => {
+      if (syncMode === "none") return;
+      const target = computeTarget();
+      if (target === null) return;
+      let diff = target - video.currentTime;
+      if (syncMode === "loop") {
+        const duration = video.duration;
+        if (Math.abs(diff) > duration / 2) {
+          diff = diff > 0 ? diff - duration : diff + duration;
+        }
+      }
+      if (Math.abs(diff) > RESYNC_THRESHOLD_S) {
+        video.currentTime = Math.max(0, target);
+      }
+    };
+    video.addEventListener("seeked", handleSeeked);
+
     const startPlayback = async () => {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
@@ -258,6 +275,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (driftTimer) clearInterval(driftTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
+      video.removeEventListener("seeked", handleSeeked);
       video.loop = false;
       video.removeAttribute("src");
       video.load();
