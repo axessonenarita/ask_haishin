@@ -51,6 +51,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [mainEnded, setMainEnded] = useState(false);
   const [postRollEnded, setPostRollEnded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -60,6 +61,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setMainEnded(false);
     setPostRollEnded(false);
     setError(null);
+    setLoading(false);
   }, [stream?.id]);
 
   useEffect(() => {
@@ -197,6 +199,21 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     };
     video.addEventListener("seeked", handleSeeked);
 
+    const handlePause = () => {
+      if (video.ended) return;
+      void video.play().catch(() => {});
+    };
+    video.addEventListener("pause", handlePause);
+
+    const handleWaiting = () => setLoading(true);
+    const handlePlaying = () => setLoading(false);
+    const handleCanPlay = () => setLoading(false);
+    video.addEventListener("waiting", handleWaiting);
+    video.addEventListener("playing", handlePlaying);
+    video.addEventListener("canplay", handleCanPlay);
+
+    setLoading(true);
+
     const startPlayback = async () => {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
@@ -264,6 +281,11 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
       video.removeEventListener("seeked", handleSeeked);
+      video.removeEventListener("pause", handlePause);
+      video.removeEventListener("waiting", handleWaiting);
+      video.removeEventListener("playing", handlePlaying);
+      video.removeEventListener("canplay", handleCanPlay);
+      setLoading(false);
       video.loop = false;
       video.removeAttribute("src");
       video.load();
@@ -345,6 +367,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             配信に参加
           </span>
         </button>
+      )}
+
+      {joined && loading && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+        </div>
       )}
 
       {joined && (
