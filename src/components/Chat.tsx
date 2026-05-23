@@ -43,6 +43,7 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
 
   const isNearBottom = useCallback((): boolean => {
@@ -54,19 +55,29 @@ export function Chat({
     );
   }, []);
 
+  const performScrollToBottom = useCallback(() => {
+    const bottom = bottomSentinelRef.current;
+    const list = listRef.current;
+    if (bottom) {
+      bottom.scrollIntoView({ block: "end", behavior: "auto" });
+    } else if (list) {
+      list.scrollTop = list.scrollHeight;
+    }
+  }, []);
+
   useLayoutEffect(() => {
     if (!shouldScrollOnUpdateRef.current) return;
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
     shouldScrollOnUpdateRef.current = false;
+    performScrollToBottom();
+    requestAnimationFrame(performScrollToBottom);
     setUnreadCount(0);
-  }, [messages]);
+  }, [messages, performScrollToBottom]);
 
   const jumpToBottom = useCallback(() => {
-    const el = listRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    performScrollToBottom();
+    requestAnimationFrame(performScrollToBottom);
     setUnreadCount(0);
-  }, []);
+  }, [performScrollToBottom]);
 
   const handleScroll = useCallback(() => {
     if (isNearBottom()) {
@@ -237,6 +248,7 @@ export function Chat({
           {messages.map((m) => (
             <MessageItem key={m.id} message={m} />
           ))}
+          <div ref={bottomSentinelRef} aria-hidden />
         </div>
 
         {unreadCount > 0 && (
