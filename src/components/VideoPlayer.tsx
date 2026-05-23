@@ -303,6 +303,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         onClick={showControls}
       />
 
+      {phase === "preRoll" && stream && (
+        <div className="pointer-events-none absolute right-3 top-3 z-10 rounded bg-black/70 px-2 py-1 text-right text-white">
+          <div className="text-[10px] text-neutral-300">開始まで</div>
+          <div className="font-mono text-sm font-bold">
+            {formatCountdown(new Date(stream.start_at).getTime() - now)}
+          </div>
+        </div>
+      )}
+
       {!joined && (
         <button
           type="button"
