@@ -233,18 +233,17 @@ export function Chat({
         </div>
       </div>
 
-      <div className="border-b border-bg-border px-3 py-2 text-[11px] leading-snug text-neutral-400">
-        ニックネームで参加できます。ログインは不要です。
-        <br />
-        荒らし・なりすまし・不適切投稿は運営判断で削除します。
-      </div>
-
       <div className="relative flex-1 min-h-0">
         <div
           ref={listRef}
           onScroll={handleScroll}
           className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
         >
+          <div className="px-3 pb-2 text-[11px] leading-snug text-neutral-400">
+            ニックネームで参加できます。ログインは不要です。
+            <br />
+            荒らし・なりすまし・不適切投稿は運営判断で削除します。
+          </div>
           {messages.map((m) => (
             <MessageItem key={m.id} message={m} />
           ))}
