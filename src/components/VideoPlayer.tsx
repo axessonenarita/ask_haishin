@@ -44,7 +44,6 @@ function formatCountdown(diffMs: number): string {
 }
 
 export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const now = useServerTime();
@@ -64,10 +63,18 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   }, [stream?.id]);
 
   useEffect(() => {
-    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
+    if (!isFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [isFullscreen]);
 
   const showControls = useCallback(() => {
     setControlsVisible(true);
@@ -101,26 +108,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   );
 
   const toggleFullscreen = useCallback(() => {
-    const container = containerRef.current;
-    const video = videoRef.current;
-    if (!container || !video) return;
-
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-      return;
-    }
-
-    if (typeof container.requestFullscreen === "function") {
-      void container.requestFullscreen();
-      return;
-    }
-
-    const iosVideo = video as HTMLVideoElement & {
-      webkitEnterFullscreen?: () => void;
-    };
-    if (typeof iosVideo.webkitEnterFullscreen === "function") {
-      iosVideo.webkitEnterFullscreen();
-    }
+    setIsFullscreen((v) => !v);
   }, []);
 
   const phase: Phase = useMemo(() => {
@@ -319,9 +307,10 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
   return (
     <div
-      ref={containerRef}
-      className={`relative w-full bg-black ${
-        isFullscreen ? "h-screen" : "aspect-video"
+      className={`w-full bg-black ${
+        isFullscreen
+          ? "fixed inset-0 z-50 h-[100dvh]"
+          : "relative aspect-video"
       }`}
       onMouseMove={showControls}
       onMouseLeave={() => setControlsVisible(false)}
