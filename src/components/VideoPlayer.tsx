@@ -19,10 +19,6 @@ type Props = {
   onPlaybackEnded?: () => void;
 };
 
-function elapsedSeconds(startAtIso: string, nowMs: number): number {
-  return (nowMs - new Date(startAtIso).getTime()) / 1000;
-}
-
 function formatStartAt(iso: string): string {
   try {
     const d = new Date(iso);
@@ -149,26 +145,43 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (phase !== "live" && phase !== "preRoll" && phase !== "postRoll") return;
     const video = videoRef.current;
     if (!video) return;
+    if (!stream) return;
 
     let cancelled = false;
     let hlsInstance: { destroy: () => void } | null = null;
     let driftTimer: ReturnType<typeof setInterval> | null = null;
 
+    const startAtMs = new Date(stream.start_at).getTime();
     let src: string;
     let useLoop = false;
-    let useDriftSync = false;
-    let driftStartAt: string | null = null;
+    let syncMode: "none" | "live" | "loop" = "none";
+    let syncAnchorMs = 0;
 
-    if (phase === "live" && stream) {
+    if (phase === "live") {
       src = stream.hls_url;
-      useDriftSync = true;
-      driftStartAt = stream.start_at;
+      syncMode = "live";
+      syncAnchorMs = startAtMs;
+    } else if (phase === "preRoll") {
+      src = INTERVAL_VIDEO_URL;
+      useLoop = true;
+      syncMode = "loop";
+      syncAnchorMs = startAtMs - PRE_ROLL_LEAD_MS;
     } else {
       src = INTERVAL_VIDEO_URL;
-      useLoop = phase === "preRoll";
     }
 
     video.loop = useLoop;
+
+    const computeTarget = (): number | null => {
+      const elapsed = (getServerNow() - syncAnchorMs) / 1000;
+      if (elapsed < 0) return null;
+      if (syncMode === "loop") {
+        const duration = video.duration;
+        if (!Number.isFinite(duration) || duration <= 0) return null;
+        return elapsed % duration;
+      }
+      return elapsed;
+    };
 
     const handleEnded = () => {
       if (phase === "live") {
@@ -203,17 +216,14 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         }
       }
 
-      if (useDriftSync && driftStartAt) {
-        const seekToLive = () => {
-          const target = Math.max(
-            0,
-            elapsedSeconds(driftStartAt!, getServerNow()),
-          );
-          if (Number.isFinite(target)) {
+      if (syncMode !== "none") {
+        const seekToTarget = () => {
+          const target = computeTarget();
+          if (target !== null && Number.isFinite(target)) {
             video.currentTime = target;
           }
         };
-        video.addEventListener("loadedmetadata", seekToLive, { once: true });
+        video.addEventListener("loadedmetadata", seekToTarget, { once: true });
       }
 
       try {
@@ -222,14 +232,20 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         setError("再生を開始できませんでした");
       }
 
-      if (useDriftSync && driftStartAt) {
+      if (syncMode !== "none") {
         driftTimer = setInterval(() => {
           if (!video.duration || video.paused) return;
-          const expected = elapsedSeconds(driftStartAt!, getServerNow());
-          if (expected < 0) return;
-          const diff = expected - video.currentTime;
+          const target = computeTarget();
+          if (target === null) return;
+          let diff = target - video.currentTime;
+          if (syncMode === "loop") {
+            const duration = video.duration;
+            if (Math.abs(diff) > duration / 2) {
+              diff = diff > 0 ? diff - duration : diff + duration;
+            }
+          }
           if (Math.abs(diff) > RESYNC_THRESHOLD_S) {
-            video.currentTime = Math.max(0, expected);
+            video.currentTime = Math.max(0, target);
           }
         }, RESYNC_INTERVAL_MS);
       }
