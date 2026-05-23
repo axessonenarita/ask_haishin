@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Stream } from "@/lib/types";
-import { effectiveStreamStatus } from "@/lib/streamStatus";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
 
+const INTERVAL_VIDEO_URL =
+  "https://vz-99df5632-92b.b-cdn.net/5d8cd7a4-9970-4c3e-bb01-f8392231de31/playlist.m3u8";
+const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 5;
 const CONTROLS_HIDE_DELAY_MS = 2500;
+
+type Phase = "none" | "farWaiting" | "preRoll" | "live" | "postRoll" | "ended";
 
 type Props = {
   stream: Stream | null;
@@ -49,11 +53,19 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const now = useServerTime();
   const [joined, setJoined] = useState(false);
+  const [mainEnded, setMainEnded] = useState(false);
+  const [postRollEnded, setPostRollEnded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+
+  useEffect(() => {
+    setMainEnded(false);
+    setPostRollEnded(false);
+    setError(null);
+  }, [stream?.id]);
 
   useEffect(() => {
     const onChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -115,8 +127,26 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     }
   }, []);
 
+  const phase: Phase = useMemo(() => {
+    if (!stream) return "none";
+    if (stream.status === "ended" || playbackEnded || postRollEnded)
+      return "ended";
+    if (mainEnded) return "postRoll";
+    const startMs = new Date(stream.start_at).getTime();
+    if (now >= startMs) return "live";
+    if (now >= startMs - PRE_ROLL_LEAD_MS) return "preRoll";
+    return "farWaiting";
+  }, [stream, now, mainEnded, postRollEnded, playbackEnded]);
+
   useEffect(() => {
-    if (!stream || !joined || playbackEnded) return;
+    if (phase === "ended" && !playbackEnded) {
+      onPlaybackEnded?.();
+    }
+  }, [phase, playbackEnded, onPlaybackEnded]);
+
+  useEffect(() => {
+    if (!joined) return;
+    if (phase !== "live" && phase !== "preRoll" && phase !== "postRoll") return;
     const video = videoRef.current;
     if (!video) return;
 
@@ -124,11 +154,32 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     let hlsInstance: { destroy: () => void } | null = null;
     let driftTimer: ReturnType<typeof setInterval> | null = null;
 
-    const handleEnded = () => onPlaybackEnded?.();
+    let src: string;
+    let useLoop = false;
+    let useDriftSync = false;
+    let driftStartAt: string | null = null;
+
+    if (phase === "live" && stream) {
+      src = stream.hls_url;
+      useDriftSync = true;
+      driftStartAt = stream.start_at;
+    } else {
+      src = INTERVAL_VIDEO_URL;
+      useLoop = phase === "preRoll";
+    }
+
+    video.loop = useLoop;
+
+    const handleEnded = () => {
+      if (phase === "live") {
+        setMainEnded(true);
+      } else if (phase === "postRoll") {
+        setPostRollEnded(true);
+      }
+    };
     video.addEventListener("ended", handleEnded);
 
     const startPlayback = async () => {
-      const src = stream.hls_url;
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
         video.src = src;
@@ -152,17 +203,18 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         }
       }
 
-      const seekToLive = () => {
-        const target = Math.max(
-          0,
-          elapsedSeconds(stream.start_at, getServerNow()),
-        );
-        if (Number.isFinite(target)) {
-          video.currentTime = target;
-        }
-      };
-
-      video.addEventListener("loadedmetadata", seekToLive, { once: true });
+      if (useDriftSync && driftStartAt) {
+        const seekToLive = () => {
+          const target = Math.max(
+            0,
+            elapsedSeconds(driftStartAt!, getServerNow()),
+          );
+          if (Number.isFinite(target)) {
+            video.currentTime = target;
+          }
+        };
+        video.addEventListener("loadedmetadata", seekToLive, { once: true });
+      }
 
       try {
         await video.play();
@@ -170,15 +222,17 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         setError("再生を開始できませんでした");
       }
 
-      driftTimer = setInterval(() => {
-        if (!video.duration || video.paused) return;
-        const expected = elapsedSeconds(stream.start_at, getServerNow());
-        if (expected < 0) return;
-        const diff = expected - video.currentTime;
-        if (Math.abs(diff) > RESYNC_THRESHOLD_S) {
-          video.currentTime = Math.max(0, expected);
-        }
-      }, RESYNC_INTERVAL_MS);
+      if (useDriftSync && driftStartAt) {
+        driftTimer = setInterval(() => {
+          if (!video.duration || video.paused) return;
+          const expected = elapsedSeconds(driftStartAt!, getServerNow());
+          if (expected < 0) return;
+          const diff = expected - video.currentTime;
+          if (Math.abs(diff) > RESYNC_THRESHOLD_S) {
+            video.currentTime = Math.max(0, expected);
+          }
+        }, RESYNC_INTERVAL_MS);
+      }
     };
 
     void startPlayback();
@@ -188,12 +242,13 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (driftTimer) clearInterval(driftTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
+      video.loop = false;
       video.removeAttribute("src");
       video.load();
     };
-  }, [stream, joined, playbackEnded, onPlaybackEnded]);
+  }, [joined, phase, stream]);
 
-  if (!stream) {
+  if (phase === "none") {
     return (
       <Overlay>
         <div className="text-sm text-neutral-300">
@@ -203,9 +258,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     );
   }
 
-  const status = effectiveStreamStatus(stream, now, playbackEnded);
-
-  if (status === "waiting") {
+  if (phase === "farWaiting" && stream) {
     const diff = new Date(stream.start_at).getTime() - now;
     return (
       <Overlay>
@@ -221,7 +274,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     );
   }
 
-  if (status === "ended") {
+  if (phase === "ended" && stream) {
     return (
       <Overlay>
         <div className="text-xs text-neutral-400">{stream.title}</div>
