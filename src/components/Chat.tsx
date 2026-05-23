@@ -243,12 +243,12 @@ export function Chat({
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="chat-scroll absolute inset-0 overflow-y-auto py-2"
+          className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
         >
           {messages.map((m) => (
             <MessageItem key={m.id} message={m} />
           ))}
-          <div ref={bottomSentinelRef} aria-hidden />
+          <div ref={bottomSentinelRef} aria-hidden className="h-1" />
         </div>
 
         {unreadCount > 0 && (
