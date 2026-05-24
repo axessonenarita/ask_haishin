@@ -7,11 +7,19 @@ import { getServerNow, useServerTime } from "@/lib/useServerTime";
 const INTERVAL_VIDEO_URL =
   "https://vz-99df5632-92b.b-cdn.net/5d8cd7a4-9970-4c3e-bb01-f8392231de31/playlist.m3u8";
 const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
+const INTERMISSION_LEAD_MS = 15 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 5;
 const CONTROLS_HIDE_DELAY_MS = 2500;
 
-type Phase = "none" | "farWaiting" | "preRoll" | "live" | "postRoll" | "ended";
+type Phase =
+  | "none"
+  | "farWaiting"
+  | "preRoll"
+  | "intermission"
+  | "live"
+  | "postRoll"
+  | "ended";
 
 type Props = {
   stream: Stream | null;
@@ -120,6 +128,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (mainEnded) return "postRoll";
     const startMs = new Date(stream.start_at).getTime();
     if (now >= startMs) return "live";
+    if (now >= startMs - INTERMISSION_LEAD_MS) return "intermission";
     if (now >= startMs - PRE_ROLL_LEAD_MS) return "preRoll";
     return "farWaiting";
   }, [stream, now, mainEnded, postRollEnded, playbackEnded]);
@@ -318,6 +327,21 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     );
   }
 
+  if (phase === "intermission" && stream) {
+    const diff = new Date(stream.start_at).getTime() - now;
+    return (
+      <Overlay>
+        <div className="text-xs text-neutral-400">{stream.title}</div>
+        <div className="mt-3 animate-pulse text-xl font-bold">
+          まもなく開始します
+        </div>
+        <div className="mt-3 font-mono text-sm text-neutral-300">
+          {formatCountdown(diff)}
+        </div>
+      </Overlay>
+    );
+  }
+
   if (phase === "ended" && stream) {
     return (
       <Overlay>
@@ -455,7 +479,7 @@ function ExitFullscreenIcon() {
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative aspect-video w-full bg-black">
-      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+      <div className="absolute inset-0 flex animate-fadeIn flex-col items-center justify-center text-center">
         {children}
       </div>
     </div>
