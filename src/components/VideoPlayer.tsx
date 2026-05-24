@@ -64,6 +64,38 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
+  const targetVolumeRef = useRef(1);
+  const fadeRafRef = useRef<number | null>(null);
+
+  const cancelFade = useCallback(() => {
+    if (fadeRafRef.current !== null) {
+      cancelAnimationFrame(fadeRafRef.current);
+      fadeRafRef.current = null;
+    }
+  }, []);
+
+  const fadeVolumeTo = useCallback(
+    (targetVal: number, durationMs: number) => {
+      const v = videoRef.current;
+      if (!v) return;
+      cancelFade();
+      const startVal = v.volume;
+      const startTime = performance.now();
+      const animate = (now: number) => {
+        const elapsed = now - startTime;
+        if (elapsed >= durationMs) {
+          v.volume = targetVal;
+          fadeRafRef.current = null;
+          return;
+        }
+        const t = elapsed / durationMs;
+        v.volume = startVal + (targetVal - startVal) * t;
+        fadeRafRef.current = requestAnimationFrame(animate);
+      };
+      fadeRafRef.current = requestAnimationFrame(animate);
+    },
+    [cancelFade],
+  );
 
   useEffect(() => {
     setMainEnded(false);
@@ -108,13 +140,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       const v = videoRef.current;
       if (!v) return;
       const value = Number(e.target.value);
+      cancelFade();
       v.volume = value;
       v.muted = value === 0;
+      targetVolumeRef.current = value;
       setVolume(value);
       setMuted(value === 0);
       showControls();
     },
-    [showControls],
+    [cancelFade, showControls],
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -138,6 +172,22 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       onPlaybackEnded?.();
     }
   }, [phase, playbackEnded, onPlaybackEnded]);
+
+  useEffect(() => {
+    if (!stream || !joined) return;
+    if (phase !== "preRoll") return;
+    const startMs = new Date(stream.start_at).getTime();
+    const fadeStartAtMs = startMs - INTERMISSION_LEAD_MS - 500;
+    const delay = fadeStartAtMs - getServerNow();
+    if (delay > 60_000 || delay < -10_000) return;
+    const timer = setTimeout(
+      () => {
+        fadeVolumeTo(0, 500);
+      },
+      Math.max(0, delay),
+    );
+    return () => clearTimeout(timer);
+  }, [phase, stream, joined, fadeVolumeTo]);
 
   useEffect(() => {
     if (!joined) return;
@@ -221,7 +271,29 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     video.addEventListener("playing", handlePlaying);
     video.addEventListener("canplay", handleCanPlay);
 
+    let fadeInDone = false;
+    const handleFirstPlaying = () => {
+      if (fadeInDone) return;
+      fadeInDone = true;
+      fadeVolumeTo(targetVolumeRef.current, 600);
+    };
+    video.addEventListener("playing", handleFirstPlaying);
+
+    let naturalFadeOutStarted = false;
+    const handleTimeUpdate = () => {
+      if (naturalFadeOutStarted) return;
+      if (phase !== "live" && phase !== "postRoll") return;
+      const d = video.duration;
+      if (!Number.isFinite(d) || d <= 0) return;
+      if (video.currentTime >= d - 0.5) {
+        naturalFadeOutStarted = true;
+        fadeVolumeTo(0, 400);
+      }
+    };
+    video.addEventListener("timeupdate", handleTimeUpdate);
+
     setLoading(true);
+    video.volume = 0;
 
     const startPlayback = async () => {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
@@ -286,6 +358,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
     return () => {
       cancelled = true;
+      cancelFade();
       if (driftTimer) clearInterval(driftTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
@@ -294,12 +367,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("playing", handleFirstPlaying);
+      video.removeEventListener("timeupdate", handleTimeUpdate);
       setLoading(false);
       video.loop = false;
+      video.volume = targetVolumeRef.current;
       video.removeAttribute("src");
       video.load();
     };
-  }, [joined, phase, stream]);
+  }, [joined, phase, stream, fadeVolumeTo, cancelFade]);
 
   if (phase === "none") {
     return (
