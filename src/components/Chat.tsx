@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -42,9 +43,21 @@ export function Chat({
   const [sending, setSending] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+
+  const latestAdminMessage = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === "admin" && !m.deleted) return m;
+    }
+    return null;
+  }, [messages]);
+
+  const showAdminBanner =
+    latestAdminMessage !== null && latestAdminMessage.id !== dismissedAdminId;
 
   const isNearBottom = useCallback((): boolean => {
     const el = listRef.current;
@@ -89,6 +102,7 @@ export function Chat({
     let cancelled = false;
     setMessages([]);
     setUnreadCount(0);
+    setDismissedAdminId(null);
 
     (async () => {
       const { data, error } = await supabase
@@ -232,6 +246,29 @@ export function Chat({
           </button>
         </div>
       </div>
+
+      {showAdminBanner && latestAdminMessage && (
+        <div className="flex items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+          <div className="min-w-0 flex-1 break-words text-sm">
+            <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
+              運営からのお知らせ
+            </div>
+            <div>
+              <span className="mr-1">{latestAdminMessage.nickname}</span>
+              <span className="text-neutral-400">：</span>
+              <span className="text-neutral-100">{latestAdminMessage.body}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDismissedAdminId(latestAdminMessage.id)}
+            className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
+            aria-label="お知らせを閉じる"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="relative flex-1 min-h-0">
         <div
