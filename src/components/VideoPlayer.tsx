@@ -9,7 +9,8 @@ const INTERVAL_VIDEO_URL =
 const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
 const INTERMISSION_LEAD_MS = 15 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
-const RESYNC_THRESHOLD_S = 5;
+const RESYNC_THRESHOLD_S = 10;
+const CATCH_UP_THRESHOLD_S = 3;
 const CONTROLS_HIDE_DELAY_MS = 2500;
 
 type Phase =
@@ -64,38 +65,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [volume, setVolume] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
-  const targetVolumeRef = useRef(1);
-  const fadeRafRef = useRef<number | null>(null);
-
-  const cancelFade = useCallback(() => {
-    if (fadeRafRef.current !== null) {
-      cancelAnimationFrame(fadeRafRef.current);
-      fadeRafRef.current = null;
-    }
-  }, []);
-
-  const fadeVolumeTo = useCallback(
-    (targetVal: number, durationMs: number) => {
-      const v = videoRef.current;
-      if (!v) return;
-      cancelFade();
-      const startVal = v.volume;
-      const startTime = performance.now();
-      const animate = (now: number) => {
-        const elapsed = now - startTime;
-        if (elapsed >= durationMs) {
-          v.volume = targetVal;
-          fadeRafRef.current = null;
-          return;
-        }
-        const t = elapsed / durationMs;
-        v.volume = startVal + (targetVal - startVal) * t;
-        fadeRafRef.current = requestAnimationFrame(animate);
-      };
-      fadeRafRef.current = requestAnimationFrame(animate);
-    },
-    [cancelFade],
-  );
 
   useEffect(() => {
     setMainEnded(false);
@@ -140,15 +109,13 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       const v = videoRef.current;
       if (!v) return;
       const value = Number(e.target.value);
-      cancelFade();
       v.volume = value;
       v.muted = value === 0;
-      targetVolumeRef.current = value;
       setVolume(value);
       setMuted(value === 0);
       showControls();
     },
-    [cancelFade, showControls],
+    [showControls],
   );
 
   const toggleFullscreen = useCallback(() => {
@@ -173,21 +140,60 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     }
   }, [phase, playbackEnded, onPlaybackEnded]);
 
-  useEffect(() => {
-    if (!stream || !joined) return;
-    if (phase !== "preRoll") return;
-    const startMs = new Date(stream.start_at).getTime();
-    const fadeStartAtMs = startMs - INTERMISSION_LEAD_MS - 500;
-    const delay = fadeStartAtMs - getServerNow();
-    if (delay > 60_000 || delay < -10_000) return;
-    const timer = setTimeout(
-      () => {
-        fadeVolumeTo(0, 500);
-      },
-      Math.max(0, delay),
-    );
-    return () => clearTimeout(timer);
-  }, [phase, stream, joined, fadeVolumeTo]);
+  const computeSyncTargetSec = useCallback((): number | null => {
+    const video = videoRef.current;
+    if (!video || !stream) return null;
+    const startAtMs = new Date(stream.start_at).getTime();
+    let anchorMs: number;
+    let isLoop = false;
+    if (phase === "live") {
+      anchorMs = startAtMs;
+    } else if (phase === "preRoll") {
+      anchorMs = startAtMs - PRE_ROLL_LEAD_MS;
+      isLoop = true;
+    } else {
+      return null;
+    }
+    const elapsed = (getServerNow() - anchorMs) / 1000;
+    if (elapsed < 0) return null;
+    if (isLoop) {
+      const duration = video.duration;
+      if (!Number.isFinite(duration) || duration <= 0) return null;
+      return elapsed % duration;
+    }
+    return elapsed;
+  }, [phase, stream]);
+
+  const catchUp = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const target = computeSyncTargetSec();
+    if (target === null) return;
+    video.currentTime = Math.max(0, target);
+  }, [computeSyncTargetSec]);
+
+  // 「ライブから遅れている秒数」（負ならスキップ）。now を依存に取り毎秒再計算
+  const behindSec = useMemo(() => {
+    const video = videoRef.current;
+    if (!video) return 0;
+    if (phase !== "live" && phase !== "preRoll") return 0;
+    const target = computeSyncTargetSec();
+    if (target === null) return 0;
+    let diff = target - video.currentTime;
+    if (phase === "preRoll") {
+      const duration = video.duration;
+      if (Number.isFinite(duration) && duration > 0) {
+        if (Math.abs(diff) > duration / 2) {
+          diff = diff > 0 ? diff - duration : diff + duration;
+        }
+      }
+    }
+    return diff;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, now, computeSyncTargetSec]);
+
+  const showCatchUp =
+    joined && !loading && behindSec > CATCH_UP_THRESHOLD_S;
 
   useEffect(() => {
     if (!joined) return;
@@ -271,29 +277,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     video.addEventListener("playing", handlePlaying);
     video.addEventListener("canplay", handleCanPlay);
 
-    let fadeInDone = false;
-    const handleFirstPlaying = () => {
-      if (fadeInDone) return;
-      fadeInDone = true;
-      fadeVolumeTo(targetVolumeRef.current, 600);
-    };
-    video.addEventListener("playing", handleFirstPlaying);
-
-    let naturalFadeOutStarted = false;
-    const handleTimeUpdate = () => {
-      if (naturalFadeOutStarted) return;
-      if (phase !== "live" && phase !== "postRoll") return;
-      const d = video.duration;
-      if (!Number.isFinite(d) || d <= 0) return;
-      if (video.currentTime >= d - 0.5) {
-        naturalFadeOutStarted = true;
-        fadeVolumeTo(0, 400);
-      }
-    };
-    video.addEventListener("timeupdate", handleTimeUpdate);
-
     setLoading(true);
-    video.volume = 0;
 
     const startPlayback = async () => {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
@@ -358,7 +342,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
     return () => {
       cancelled = true;
-      cancelFade();
       if (driftTimer) clearInterval(driftTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
@@ -367,15 +350,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("canplay", handleCanPlay);
-      video.removeEventListener("playing", handleFirstPlaying);
-      video.removeEventListener("timeupdate", handleTimeUpdate);
       setLoading(false);
       video.loop = false;
-      video.volume = targetVolumeRef.current;
       video.removeAttribute("src");
       video.load();
     };
-  }, [joined, phase, stream, fadeVolumeTo, cancelFade]);
+  }, [joined, phase, stream]);
 
   if (phase === "none") {
     return (
@@ -473,6 +453,17 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white" />
         </div>
+      )}
+
+      {showCatchUp && (
+        <button
+          type="button"
+          onClick={catchUp}
+          className="absolute bottom-14 right-3 z-10 flex items-center gap-1 rounded-full bg-red-600 px-3 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-red-500"
+        >
+          <span className="inline-block h-2 w-2 rounded-full bg-white" />
+          ライブに追いつく ({Math.round(behindSec)}秒遅れ)
+        </button>
       )}
 
       {joined && (
