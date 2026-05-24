@@ -28,6 +28,15 @@ const config: Config = {
           black: "#9ca3af",
         },
       },
+      animation: {
+        fadeIn: "fadeIn 0.7s ease-in both",
+      },
+      keyframes: {
+        fadeIn: {
+          "0%": { opacity: "0" },
+          "100%": { opacity: "1" },
+        },
+      },
     },
   },
   plugins: [],
