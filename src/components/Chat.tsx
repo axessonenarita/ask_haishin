@@ -439,7 +439,7 @@ export function Chat({
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             maxLength={MAX_BODY_LENGTH}
-            placeholder="いまどうしてる?"
+            placeholder="配信にコメントを送ろう!"
             className="min-h-0 w-full flex-1 resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
             disabled={sending}
             tabIndex={inputFocused ? 0 : -1}
