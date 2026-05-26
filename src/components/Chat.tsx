@@ -306,7 +306,7 @@ export function Chat({
 
       <form
         onSubmit={handleSubmit}
-        className="flex gap-2 border-t border-bg-border bg-bg-panel p-2"
+        className="flex gap-2 border-t border-bg-border bg-bg-panel px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       >
         <input
           type="text"
