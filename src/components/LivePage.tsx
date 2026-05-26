@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
@@ -11,13 +12,43 @@ import { VideoPlayer } from "./VideoPlayer";
 
 type Props = { stream: Stream | null };
 
-export function LivePage({ stream }: Props) {
+export function LivePage({ stream: initialStream }: Props) {
   const { profile, loaded, save } = useProfile();
+  const [stream, setStream] = useState<Stream | null>(initialStream);
   const [playbackEnded, setPlaybackEnded] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
 
   useEffect(() => {
+    setStream(initialStream);
+  }, [initialStream]);
+
+  useEffect(() => {
     setPlaybackEnded(false);
+  }, [stream?.id]);
+
+  useEffect(() => {
+    const id = stream?.id;
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`stream-realtime-${id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "streams",
+          filter: `id=eq.${id}`,
+        },
+        (payload) => {
+          setStream(payload.new as Stream);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [stream?.id]);
 
   const handlePlaybackEnded = useCallback(() => {
