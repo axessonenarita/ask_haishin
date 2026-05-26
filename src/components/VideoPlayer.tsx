@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { trackEvent } from "@/lib/analytics";
 import type { Stream } from "@/lib/types";
@@ -237,6 +238,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           reason,
           stream_id: stream.id,
           phase,
+        });
+        Sentry.captureMessage(`playback recovery exhausted: ${reason}`, {
+          level: "warning",
+          tags: {
+            stream_id: stream.id,
+            slug: stream.slug,
+            phase,
+            reason,
+          },
         });
         return;
       }
