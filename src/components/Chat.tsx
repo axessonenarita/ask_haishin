@@ -15,6 +15,7 @@ import {
   MAX_BODY_LENGTH,
   RATE_LIMIT_MS,
 } from "@/lib/constants";
+import { trackEvent } from "@/lib/analytics";
 import { containsBannedWord, sanitizeBody } from "@/lib/validation";
 import type { Message, UserProfile } from "@/lib/types";
 import { MessageItem } from "./MessageItem";
@@ -215,6 +216,7 @@ export function Chat({
 
       localStorage.setItem(LS_KEYS.lastPostAt, String(now));
       setBody("");
+      trackEvent("message_post", { stream_id: streamId });
       if (wasAtBottom) {
         shouldScrollOnUpdateRef.current = true;
       }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 import type { Stream } from "@/lib/types";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
 
@@ -188,7 +189,11 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     const target = computeSyncTargetSec();
     if (target === null) return;
     video.currentTime = Math.max(0, target);
-  }, [computeSyncTargetSec]);
+    trackEvent("catch_up_click", {
+      stream_id: stream?.id,
+      phase,
+    });
+  }, [computeSyncTargetSec, stream?.id, phase]);
 
   const behindSec = useMemo(() => {
     const video = videoRef.current;
@@ -228,6 +233,11 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (cancelled) return;
       if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
         setError("再生が安定しません。「もう一度再生」をお試しください。");
+        trackEvent("playback_recovery_exhausted", {
+          reason,
+          stream_id: stream.id,
+          phase,
+        });
         return;
       }
       recoveryAttemptsRef.current++;
@@ -236,6 +246,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           `[VideoPlayer] recovery (${reason}) attempt ${recoveryAttemptsRef.current}/${MAX_RECOVERY_ATTEMPTS}`,
         );
       }
+      trackEvent("playback_recovery", {
+        reason,
+        attempt: recoveryAttemptsRef.current,
+        stream_id: stream.id,
+        phase,
+      });
       setPlaybackKey((k) => k + 1);
     };
 
@@ -568,7 +584,14 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       {!joined && (
         <button
           type="button"
-          onClick={() => setJoined(true)}
+          onClick={() => {
+            setJoined(true);
+            trackEvent("stream_join", {
+              stream_id: stream?.id,
+              slug: stream?.slug,
+              phase,
+            });
+          }}
           className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 text-white"
         >
           <span className="rounded-md bg-blue-600 px-6 py-3 text-base font-bold hover:bg-blue-500">

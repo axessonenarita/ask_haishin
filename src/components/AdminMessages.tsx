@@ -242,7 +242,7 @@ export function AdminMessages() {
         {loading ? (
           <div className="text-neutral-400">読み込み中…</div>
         ) : (
-          <ul className="divide-y divide-bg-border">
+          <ul className="divide-y divide-bg-border lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
             {messages.map((m) => {
               const stream = streams.find((s) => s.id === m.stream_id);
               return (
