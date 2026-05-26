@@ -11,7 +11,8 @@ const INTERMISSION_LEAD_MS = 15 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 10;
 const CATCH_UP_THRESHOLD_S = 3;
-const CONTROLS_HIDE_DELAY_MS = 2500;
+const MANIFEST_WAIT_MS = 5000;
+const PLAY_RETRY_DELAY_MS = 400;
 
 type Phase =
   | "none"
@@ -54,7 +55,6 @@ function formatCountdown(diffMs: number): string {
 
 export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const now = useServerTime();
   const [joined, setJoined] = useState(false);
   const [mainEnded, setMainEnded] = useState(false);
@@ -63,14 +63,16 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(1);
+  const [needsUnmute, setNeedsUnmute] = useState(false);
+  const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [controlsVisible, setControlsVisible] = useState(true);
 
   useEffect(() => {
     setMainEnded(false);
     setPostRollEnded(false);
     setError(null);
     setLoading(false);
+    setNeedsUnmute(false);
   }, [stream?.id]);
 
   useEffect(() => {
@@ -87,22 +89,13 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     };
   }, [isFullscreen]);
 
-  const showControls = useCallback(() => {
-    setControlsVisible(true);
-    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
-    hideTimerRef.current = setTimeout(
-      () => setControlsVisible(false),
-      CONTROLS_HIDE_DELAY_MS,
-    );
-  }, []);
-
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = !v.muted;
     setMuted(v.muted);
-    showControls();
-  }, [showControls]);
+    if (!v.muted) setNeedsUnmute(false);
+  }, []);
 
   const handleVolumeChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,13 +106,27 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       v.muted = value === 0;
       setVolume(value);
       setMuted(value === 0);
-      showControls();
+      if (value > 0) setNeedsUnmute(false);
     },
-    [showControls],
+    [],
   );
+
+  const acceptUnmute = useCallback(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = false;
+    setMuted(false);
+    setNeedsUnmute(false);
+  }, []);
 
   const toggleFullscreen = useCallback(() => {
     setIsFullscreen((v) => !v);
+  }, []);
+
+  const retry = useCallback(() => {
+    setError(null);
+    setNeedsUnmute(false);
+    setPlaybackKey((k) => k + 1);
   }, []);
 
   const phase: Phase = useMemo(() => {
@@ -172,7 +179,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     video.currentTime = Math.max(0, target);
   }, [computeSyncTargetSec]);
 
-  // 「ライブから遅れている秒数」（負ならスキップ）。now を依存に取り毎秒再計算
   const behindSec = useMemo(() => {
     const video = videoRef.current;
     if (!video) return 0;
@@ -192,8 +198,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, now, computeSyncTargetSec]);
 
-  const showCatchUp =
-    joined && !loading && behindSec > CATCH_UP_THRESHOLD_S;
+  const showCatchUp = joined && !loading && behindSec > CATCH_UP_THRESHOLD_S;
 
   useEffect(() => {
     if (!joined) return;
@@ -279,6 +284,33 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
     setLoading(true);
 
+    const attemptPlay = async (): Promise<void> => {
+      // 1) 通常: 音声付きで2回試行
+      for (let i = 0; i < 2; i++) {
+        if (cancelled) return;
+        try {
+          await video.play();
+          return;
+        } catch {
+          if (i === 0) {
+            await new Promise((r) => setTimeout(r, PLAY_RETRY_DELAY_MS));
+          }
+        }
+      }
+      // 2) muted で再試行（多くのブラウザがmuted autoplayは許可）
+      if (cancelled) return;
+      try {
+        video.muted = true;
+        setMuted(true);
+        setNeedsUnmute(true);
+        await video.play();
+        return;
+      } catch {
+        // 3) 最終的に失敗
+        setError("再生を開始できませんでした");
+      }
+    };
+
     const startPlayback = async () => {
       const native = video.canPlayType("application/vnd.apple.mpegurl");
       if (native) {
@@ -288,15 +320,26 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           const mod = await import("hls.js");
           if (cancelled) return;
           const Hls = mod.default;
-          if (Hls.isSupported()) {
-            const hls = new Hls({ enableWorker: true });
-            hls.loadSource(src);
-            hls.attachMedia(video);
-            hlsInstance = hls;
-          } else {
+          if (!Hls.isSupported()) {
             setError("このブラウザではHLSを再生できません");
             return;
           }
+          const hls = new Hls({ enableWorker: true });
+          hlsInstance = hls;
+          // マニフェストパース完了まで待ってから play する
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const settle = () => {
+              if (settled) return;
+              settled = true;
+              resolve();
+            };
+            hls.once(Hls.Events.MANIFEST_PARSED, settle);
+            setTimeout(settle, MANIFEST_WAIT_MS);
+            hls.attachMedia(video);
+            hls.loadSource(src);
+          });
+          if (cancelled) return;
         } catch {
           setError("プレーヤーの読み込みに失敗しました");
           return;
@@ -310,14 +353,16 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             video.currentTime = target;
           }
         };
-        video.addEventListener("loadedmetadata", seekToTarget, { once: true });
+        if (video.readyState >= 1) {
+          seekToTarget();
+        } else {
+          video.addEventListener("loadedmetadata", seekToTarget, {
+            once: true,
+          });
+        }
       }
 
-      try {
-        await video.play();
-      } catch {
-        setError("再生を開始できませんでした");
-      }
+      await attemptPlay();
 
       if (syncMode !== "none") {
         driftTimer = setInterval(() => {
@@ -355,7 +400,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       video.removeAttribute("src");
       video.load();
     };
-  }, [joined, phase, stream]);
+  }, [joined, phase, stream, playbackKey]);
 
   if (phase === "none") {
     return (
@@ -414,9 +459,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           ? "fixed inset-0 z-50 h-[100dvh]"
           : "relative aspect-video"
       }`}
-      onMouseMove={showControls}
-      onMouseLeave={() => setControlsVisible(false)}
-      onTouchStart={showControls}
     >
       <video
         ref={videoRef}
@@ -425,7 +467,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         disablePictureInPicture
         controlsList="nodownload noremoteplayback nofullscreen"
         className="absolute inset-0 h-full w-full"
-        onClick={showControls}
       />
 
       {phase === "preRoll" && stream && (
@@ -441,7 +482,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         <button
           type="button"
           onClick={() => setJoined(true)}
-          className="absolute inset-0 flex items-center justify-center bg-black/70 text-white"
+          className="absolute inset-0 z-30 flex items-center justify-center bg-black/70 text-white"
         >
           <span className="rounded-md bg-blue-600 px-6 py-3 text-base font-bold hover:bg-blue-500">
             配信に参加
@@ -449,9 +490,33 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         </button>
       )}
 
-      {joined && loading && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      {joined && loading && !error && (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
           <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/30 border-t-white" />
+        </div>
+      )}
+
+      {joined && needsUnmute && !error && (
+        <button
+          type="button"
+          onClick={acceptUnmute}
+          className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-xl hover:bg-blue-500"
+        >
+          <VolumeIcon />
+          タップして音を出す
+        </button>
+      )}
+
+      {error && (
+        <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-3 bg-black/80 text-white">
+          <div className="text-sm">{error}</div>
+          <button
+            type="button"
+            onClick={retry}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold hover:bg-blue-500"
+          >
+            もう一度再生
+          </button>
         </div>
       )}
 
@@ -467,11 +532,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       )}
 
       {joined && (
-        <div
-          className={`absolute inset-x-0 bottom-0 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-3 pt-6 pb-3 text-white transition-opacity duration-200 ${
-            controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
-          }`}
-        >
+        <div className="absolute inset-x-0 bottom-0 z-10 flex items-center gap-3 bg-gradient-to-t from-black/80 to-transparent px-3 pt-6 pb-3 text-white">
           <button
             type="button"
             onClick={toggleMute}
@@ -499,12 +560,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           >
             {isFullscreen ? <ExitFullscreenIcon /> : <EnterFullscreenIcon />}
           </button>
-        </div>
-      )}
-
-      {error && (
-        <div className="absolute bottom-14 left-2 right-2 rounded bg-red-950/80 px-2 py-1 text-xs text-red-200">
-          {error}
         </div>
       )}
     </div>
