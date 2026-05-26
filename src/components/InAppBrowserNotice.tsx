@@ -59,15 +59,18 @@ function tryOpenExternal(type: Exclude<AppType, null>): void {
   }
 
   if (/Android/i.test(ua)) {
+    // packageを指定せず、ユーザーのデフォルトブラウザに任せる
     const stripped = url.replace(/^https?:\/\//, "");
-    const intentUrl = `intent://${stripped}#Intent;scheme=https;package=com.android.chrome;end`;
+    const intentUrl = `intent://${stripped}#Intent;scheme=https;end`;
     window.location.href = intentUrl;
     return;
   }
 
   if (/iPhone|iPad|iPod/i.test(ua)) {
-    const chromeUrl = url.replace(/^https?:\/\//, "googlechromes://");
-    window.location.href = chromeUrl;
+    // iOS にはデフォルトブラウザを直接指定するAPIはない
+    // 圧倒的シェアのSafariを優先（Chromeユーザーは「URLコピー」で対応）
+    const safariUrl = url.replace(/^https?:\/\//, "x-safari-https://");
+    window.location.href = safariUrl;
     return;
   }
 
