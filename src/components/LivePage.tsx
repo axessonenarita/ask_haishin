@@ -17,6 +17,7 @@ export function LivePage({ stream: initialStream }: Props) {
   const [stream, setStream] = useState<Stream | null>(initialStream);
   const [playbackEnded, setPlaybackEnded] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null);
 
   useEffect(() => {
     setStream(initialStream);
@@ -25,6 +26,20 @@ export function LivePage({ stream: initialStream }: Props) {
   useEffect(() => {
     setPlaybackEnded(false);
   }, [stream?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setViewportHeight(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   useEffect(() => {
     const id = stream?.id;
@@ -68,7 +83,12 @@ export function LivePage({ stream: initialStream }: Props) {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-bg-base md:flex-row">
+    <div
+      className="flex w-full flex-col bg-bg-base md:flex-row"
+      style={{
+        height: viewportHeight ? `${viewportHeight}px` : "100dvh",
+      }}
+    >
       <InAppBrowserNotice />
       <div
         className={`w-full min-w-0 flex-col md:flex md:flex-1 ${
