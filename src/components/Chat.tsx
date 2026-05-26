@@ -50,6 +50,7 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
+  const [inputFocused, setInputFocused] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
@@ -262,6 +263,8 @@ export function Chat({
           type="text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
           maxLength={MAX_BODY_LENGTH}
           placeholder="コメントを入力"
           className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
@@ -327,7 +330,7 @@ export function Chat({
           <div ref={bottomSentinelRef} aria-hidden className="h-1" />
         </div>
 
-        {unreadCount > 0 && (
+        {unreadCount > 0 && !inputFocused && (
           <button
             type="button"
             onClick={jumpToBottom}
