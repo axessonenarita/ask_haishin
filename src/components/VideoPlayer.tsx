@@ -18,6 +18,7 @@ const PLAY_RETRY_DELAY_MS = 400;
 const STALL_CHECK_INTERVAL_MS = 2000;
 const STALL_THRESHOLD_MS = 15000;
 const RECOVERY_RESET_AFTER_MS = 30000;
+const RECOVERY_COOLDOWN_MS = 1500;
 const MAX_RECOVERY_ATTEMPTS = 3;
 
 type Phase =
@@ -73,6 +74,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const recoveryAttemptsRef = useRef(0);
+  const lastRecoveryAtRef = useRef(0);
 
   useEffect(() => {
     setMainEnded(false);
@@ -81,6 +83,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setLoading(false);
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
+    lastRecoveryAtRef.current = 0;
   }, [stream?.id]);
 
   useEffect(() => {
@@ -135,6 +138,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setError(null);
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
+    lastRecoveryAtRef.current = 0;
     setPlaybackKey((k) => k + 1);
   }, []);
 
@@ -225,13 +229,39 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (!stream) return;
 
     let cancelled = false;
+    let cleanupInProgress = false;
     let hlsInstance: { destroy: () => void } | null = null;
     let driftTimer: ReturnType<typeof setInterval> | null = null;
     let stallTimer: ReturnType<typeof setInterval> | null = null;
     let resetCounterTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const triggerFullRecovery = (reason: string) => {
-      if (cancelled) return;
+    const triggerFullRecovery = (
+      reason: string,
+      extra?: Record<string, unknown>,
+    ) => {
+      if (cancelled || cleanupInProgress) return;
+
+      const sincePrev = Date.now() - lastRecoveryAtRef.current;
+      if (sincePrev < RECOVERY_COOLDOWN_MS) return;
+      lastRecoveryAtRef.current = Date.now();
+
+      const sentryContext = {
+        level: "warning" as const,
+        tags: {
+          stream_id: stream.id,
+          slug: stream.slug,
+          phase,
+          reason,
+        },
+        extra: {
+          ...extra,
+          attempt: recoveryAttemptsRef.current + 1,
+          maxAttempts: MAX_RECOVERY_ATTEMPTS,
+          userAgent:
+            typeof navigator !== "undefined" ? navigator.userAgent : "",
+        },
+      };
+
       if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
         setError("再生が安定しません。「もう一度再生」をお試しください。");
         trackEvent("playback_recovery_exhausted", {
@@ -239,21 +269,17 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           stream_id: stream.id,
           phase,
         });
-        Sentry.captureMessage(`playback recovery exhausted: ${reason}`, {
-          level: "warning",
-          tags: {
-            stream_id: stream.id,
-            slug: stream.slug,
-            phase,
-            reason,
-          },
-        });
+        Sentry.captureException(
+          new Error(`playback recovery exhausted: ${reason}`),
+          sentryContext,
+        );
         return;
       }
       recoveryAttemptsRef.current++;
       if (typeof console !== "undefined") {
         console.warn(
           `[VideoPlayer] recovery (${reason}) attempt ${recoveryAttemptsRef.current}/${MAX_RECOVERY_ATTEMPTS}`,
+          extra,
         );
       }
       trackEvent("playback_recovery", {
@@ -262,6 +288,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         stream_id: stream.id,
         phase,
       });
+      if (recoveryAttemptsRef.current === 1) {
+        Sentry.captureException(
+          new Error(`playback recovery: ${reason}`),
+          sentryContext,
+        );
+      }
       setPlaybackKey((k) => k + 1);
     };
 
@@ -347,7 +379,26 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     video.addEventListener("canplay", handleCanPlay);
 
     const handleVideoError = () => {
-      triggerFullRecovery("video.error");
+      const err = video.error;
+      const code = err?.code ?? null;
+      const codeName =
+        code === 1
+          ? "MEDIA_ERR_ABORTED"
+          : code === 2
+            ? "MEDIA_ERR_NETWORK"
+            : code === 3
+              ? "MEDIA_ERR_DECODE"
+              : code === 4
+                ? "MEDIA_ERR_SRC_NOT_SUPPORTED"
+                : "UNKNOWN";
+      triggerFullRecovery(`video.error ${codeName}`, {
+        code,
+        codeName,
+        message: err?.message,
+        networkState: video.networkState,
+        readyState: video.readyState,
+        currentSrc: video.currentSrc,
+      });
     };
     video.addEventListener("error", handleVideoError);
 
@@ -422,8 +473,24 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           hls.on(Hls.Events.ERROR, (_evt, data) => {
             if (!data.fatal) return;
             if (cancelled) return;
+            const networkDetails = (
+              data as unknown as {
+                networkDetails?: { status?: number; statusText?: string };
+              }
+            ).networkDetails;
+            const extra = {
+              hlsType: data.type,
+              hlsDetails: data.details,
+              hlsReason: data.reason,
+              networkStatus: networkDetails?.status,
+              networkStatusText: networkDetails?.statusText,
+              src,
+            };
             if (hlsInPlaceRecoveryUsed) {
-              triggerFullRecovery(`hls fatal ${data.type}`);
+              triggerFullRecovery(
+                `hls fatal ${data.type} ${data.details}`,
+                extra,
+              );
               return;
             }
             hlsInPlaceRecoveryUsed = true;
@@ -432,7 +499,10 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
               hls.recoverMediaError();
             } else {
-              triggerFullRecovery(`hls fatal ${data.type}`);
+              triggerFullRecovery(
+                `hls fatal ${data.type} ${data.details}`,
+                extra,
+              );
             }
           });
 
@@ -497,6 +567,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
     return () => {
       cancelled = true;
+      cleanupInProgress = true;
       if (driftTimer) clearInterval(driftTimer);
       if (stallTimer) clearInterval(stallTimer);
       if (resetCounterTimer) clearTimeout(resetCounterTimer);
