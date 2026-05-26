@@ -246,6 +246,8 @@ export function Chat({
       if (wasAtBottom) {
         shouldScrollOnUpdateRef.current = true;
       }
+      // 送信後はオーバーレイを閉じて動画視聴に戻す
+      inputRef.current?.blur();
     },
     [body, profile, streamId, isNearBottom],
   );
@@ -320,8 +322,9 @@ export function Chat({
         className={
           inputFocused
             ? "order-1 flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3"
-            : "order-1 flex shrink-0 gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+            : "absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0"
         }
+        aria-hidden={!inputFocused}
       >
         <input
           ref={inputRef}
@@ -331,24 +334,24 @@ export function Chat({
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
           maxLength={MAX_BODY_LENGTH}
-          placeholder={inputFocused ? "いまどうしてる?" : "コメントを入力"}
-          className={
-            inputFocused
-              ? "w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
-              : "flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-          }
+          placeholder="いまどうしてる?"
+          className="w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
           disabled={sending}
+          tabIndex={inputFocused ? 0 : -1}
         />
-        {!inputFocused && (
-          <button
-            type="submit"
-            disabled={sending || !sanitizeBody(body)}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            送信
-          </button>
-        )}
       </form>
+
+      {!inputFocused && (
+        <div className="order-1 shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.focus()}
+            className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700"
+          >
+            コメントする…
+          </button>
+        </div>
+      )}
 
       {!inputFocused && error && (
         <div className="order-2 shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
