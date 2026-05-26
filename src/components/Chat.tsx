@@ -433,6 +433,11 @@ export function Chat({
             disabled={sending}
             tabIndex={inputFocused ? 0 : -1}
           />
+          {inputFocused && (
+            <div className="mt-3 text-xs text-neutral-400">
+              「送信」で投稿、「キャンセル」で動画に戻ります
+            </div>
+          )}
         </form>
 
         {error && inputFocused && (
