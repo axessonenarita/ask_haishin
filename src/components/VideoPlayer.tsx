@@ -172,7 +172,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     let isLoop = false;
     if (phase === "live") {
       anchorMs = startAtMs;
-    } else if (phase === "preRoll") {
+    } else if (phase === "preRoll" || phase === "postRoll") {
       anchorMs = startAtMs - PRE_ROLL_LEAD_MS;
       isLoop = true;
     } else {
@@ -203,11 +203,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const behindSec = useMemo(() => {
     const video = videoRef.current;
     if (!video) return 0;
-    if (phase !== "live" && phase !== "preRoll") return 0;
+    if (phase !== "live" && phase !== "preRoll" && phase !== "postRoll")
+      return 0;
     const target = computeSyncTargetSec();
     if (target === null) return 0;
     let diff = target - video.currentTime;
-    if (phase === "preRoll") {
+    if (phase === "preRoll" || phase === "postRoll") {
       const duration = video.duration;
       if (Number.isFinite(duration) && duration > 0) {
         if (Math.abs(diff) > duration / 2) {
@@ -311,6 +312,13 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       src = INTERVAL_VIDEO_URL;
       useLoop = true;
       syncMode = "loop";
+      syncAnchorMs = startAtMs - PRE_ROLL_LEAD_MS;
+    } else if (phase === "postRoll") {
+      src = INTERVAL_VIDEO_URL;
+      useLoop = true;
+      syncMode = "loop";
+      // preRoll と同じアンカーを使うことで、間つなぎ動画のループ位置が
+      // 配信開始前後で連続した時刻ベースで揃う
       syncAnchorMs = startAtMs - PRE_ROLL_LEAD_MS;
     } else {
       src = INTERVAL_VIDEO_URL;
