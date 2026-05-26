@@ -56,7 +56,7 @@ export function Chat({
     height: number;
   } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
 
@@ -420,22 +420,33 @@ export function Chat({
               : ""
           }
         >
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
             value={body}
             onChange={(e) => setBody(e.target.value)}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             maxLength={MAX_BODY_LENGTH}
             placeholder="いまどうしてる?"
-            className="w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
+            rows={3}
+            className="w-full resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
             disabled={sending}
             tabIndex={inputFocused ? 0 : -1}
           />
           {inputFocused && (
-            <div className="mt-3 text-xs text-neutral-400">
-              「送信」で投稿、「キャンセル」で動画に戻ります
+            <div className="mt-4 rounded-md border border-bg-border/60 bg-bg-panel/40 px-3 py-2 text-xs leading-relaxed text-neutral-300">
+              <div className="mb-1 font-bold text-neutral-200">
+                ↑ 操作は画面上部のボタンから
+              </div>
+              <div>
+                投稿するときは右上の
+                <span className="font-bold text-blue-400">「送信」</span>
+                、動画に戻るときは左上の
+                <span className="font-bold text-neutral-100">
+                  「キャンセル」
+                </span>
+                を押してください
+              </div>
             </div>
           )}
         </form>
