@@ -405,8 +405,24 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     // stall検知: 再生中なのに currentTime が止まったままなら復旧
     let lastProgressTime = video.currentTime;
     let lastProgressAt = Date.now();
+    const isHidden = (): boolean =>
+      typeof document !== "undefined" && document.visibilityState === "hidden";
+    const handleVisibilityChange = () => {
+      // タブに戻ってきた直後は currentTime の進みが遅れるので
+      // stall タイマーをリセットして誤検知を避ける
+      lastProgressTime = video.currentTime;
+      lastProgressAt = Date.now();
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
     stallTimer = setInterval(() => {
       if (cancelled) return;
+      if (isHidden()) {
+        lastProgressTime = video.currentTime;
+        lastProgressAt = Date.now();
+        return;
+      }
       if (video.paused || video.ended || video.error) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
@@ -419,7 +435,20 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       }
       if (Date.now() - lastProgressAt > STALL_THRESHOLD_MS) {
         lastProgressAt = Date.now();
-        triggerFullRecovery("stall");
+        triggerFullRecovery("stall", {
+          currentTime: video.currentTime,
+          paused: video.paused,
+          ended: video.ended,
+          readyState: video.readyState,
+          networkState: video.networkState,
+          buffered:
+            video.buffered.length > 0
+              ? video.buffered.end(video.buffered.length - 1)
+              : null,
+          duration: Number.isFinite(video.duration) ? video.duration : null,
+          visibilityState:
+            typeof document !== "undefined" ? document.visibilityState : "n/a",
+        });
       }
     }, STALL_CHECK_INTERVAL_MS);
 
@@ -579,6 +608,12 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("canplay", handleCanPlay);
       video.removeEventListener("error", handleVideoError);
+      if (typeof document !== "undefined") {
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange,
+        );
+      }
       setLoading(false);
       video.loop = false;
       video.removeAttribute("src");
