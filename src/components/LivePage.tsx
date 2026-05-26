@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
+import { InAppBrowserNotice } from "./InAppBrowserNotice";
 import { ProfileSetup } from "./ProfileSetup";
 import { StreamInfo } from "./StreamInfo";
 import { VideoPlayer } from "./VideoPlayer";
@@ -37,6 +38,7 @@ export function LivePage({ stream }: Props) {
 
   return (
     <div className="flex h-[100dvh] w-full flex-col bg-bg-base md:flex-row">
+      <InAppBrowserNotice />
       <div
         className={`w-full min-w-0 flex-col md:flex md:flex-1 ${
           chatExpanded ? "hidden" : "flex"
