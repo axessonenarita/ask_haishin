@@ -24,8 +24,8 @@ type FormState = {
 };
 
 const initialForm: FormState = {
-  nickname: "",
-  avatar: AVATARS[0].id,
+  nickname: "編集",
+  avatar: "owl",
   color: COLORS[0].id,
   role: "admin",
   body: "",
