@@ -69,7 +69,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -113,20 +112,6 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setMuted(v.muted);
     if (!v.muted) setNeedsUnmute(false);
   }, []);
-
-  const handleVolumeChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const v = videoRef.current;
-      if (!v) return;
-      const value = Number(e.target.value);
-      v.volume = value;
-      v.muted = value === 0;
-      setVolume(value);
-      setMuted(value === 0);
-      if (value > 0) setNeedsUnmute(false);
-    },
-    [],
-  );
 
   const acceptUnmute = useCallback(() => {
     const v = videoRef.current;
@@ -850,18 +835,8 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             className="rounded p-1 hover:bg-white/10"
             aria-label={muted ? "ミュート解除" : "ミュート"}
           >
-            {muted || volume === 0 ? <MuteIcon /> : <VolumeIcon />}
+            {muted ? <MuteIcon /> : <VolumeIcon />}
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.05}
-            value={muted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="w-24 accent-white"
-            aria-label="音量"
-          />
           <div className="flex-1" />
           <button
             type="button"
