@@ -1,7 +1,9 @@
+import { unstable_noStore as noStore } from "next/cache";
 import { getServerClient } from "./supabase/server";
 import type { Stream } from "./types";
 
 export async function fetchActiveStream(): Promise<Stream | null> {
+  noStore();
   const supabase = getServerClient();
 
   const active = await supabase
@@ -25,6 +27,7 @@ export async function fetchActiveStream(): Promise<Stream | null> {
 }
 
 export async function fetchStreamBySlug(slug: string): Promise<Stream | null> {
+  noStore();
   const supabase = getServerClient();
   const { data } = await supabase
     .from("streams")
