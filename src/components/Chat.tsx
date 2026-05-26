@@ -279,7 +279,7 @@ export function Chat({
             <button
               type="button"
               onClick={() => inputRef.current?.blur()}
-              className="text-sm font-bold text-neutral-200"
+              className="shrink-0 rounded-md px-3 py-1.5 text-sm font-bold text-neutral-200 hover:bg-white/10"
             >
               キャンセル
             </button>
@@ -290,7 +290,7 @@ export function Chat({
                 void submitMessage();
               }}
               disabled={sending || !sanitizeBody(body)}
-              className="rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+              className="shrink-0 rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               送信
             </button>
