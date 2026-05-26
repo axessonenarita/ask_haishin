@@ -416,7 +416,7 @@ export function Chat({
           onSubmit={handleSubmit}
           className={
             inputFocused
-              ? "flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3"
+              ? "flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3 pb-3"
               : ""
           }
         >
@@ -428,13 +428,12 @@ export function Chat({
             onBlur={() => setInputFocused(false)}
             maxLength={MAX_BODY_LENGTH}
             placeholder="いまどうしてる?"
-            rows={3}
-            className="w-full resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
+            className="min-h-0 w-full flex-1 resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
             disabled={sending}
             tabIndex={inputFocused ? 0 : -1}
           />
           {inputFocused && (
-            <div className="mt-4 rounded-md border border-bg-border/60 bg-bg-panel/40 px-3 py-2 text-xs leading-relaxed text-neutral-300">
+            <div className="mt-3 shrink-0 rounded-md border border-bg-border/60 bg-bg-panel/40 px-3 py-2 text-xs leading-relaxed text-neutral-300">
               <div className="mb-1 font-bold text-neutral-200">
                 ↑ 操作は画面上部のボタンから
               </div>
