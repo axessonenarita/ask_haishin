@@ -51,13 +51,11 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
-  const [formLift, setFormLift] = useState(0);
   const [overlayDims, setOverlayDims] = useState<{
     top: number;
     height: number;
   } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
@@ -76,40 +74,6 @@ export function Chat({
       vv.removeEventListener("scroll", update);
     };
   }, []);
-
-  useEffect(() => {
-    if (!inputFocused) {
-      setFormLift(0);
-      return;
-    }
-    const measure = () => {
-      const form = formRef.current;
-      const vv = typeof window !== "undefined" ? window.visualViewport : null;
-      if (!form || !vv) return;
-      const rect = form.getBoundingClientRect();
-      const visibleBottom = vv.offsetTop + vv.height;
-      // iOS Safari の下部 URL バー(shrunk モード ~50px)が可視領域の
-      // 底に被さってくるので、余裕を持って 60px 上を「実質的な底」と
-      // みなして必要分だけ持ち上げる
-      const safeBottom = visibleBottom - 60;
-      const lift = rect.bottom - safeBottom;
-      setFormLift(lift > 0 ? lift : 0);
-    };
-    measure();
-    const t1 = window.setTimeout(measure, 100);
-    const t2 = window.setTimeout(measure, 350);
-    const t3 = window.setTimeout(measure, 700);
-    const vv = window.visualViewport;
-    vv?.addEventListener("resize", measure);
-    vv?.addEventListener("scroll", measure);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-      window.clearTimeout(t3);
-      vv?.removeEventListener("resize", measure);
-      vv?.removeEventListener("scroll", measure);
-    };
-  }, [inputFocused]);
 
   const latestAdminMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -290,7 +254,7 @@ export function Chat({
     <div
       className={
         inputFocused
-          ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-md"
+          ? "fixed inset-x-0 z-50 flex flex-col bg-black/70 backdrop-blur-md"
           : "flex h-full flex-col bg-bg-panel"
       }
       style={
@@ -299,20 +263,35 @@ export function Chat({
           : undefined
       }
     >
-      <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel/70 px-3 py-2">
-        <div className="text-sm font-bold text-neutral-200">ライブチャット</div>
-        <div className="flex items-center gap-2">
-          {inputFocused ? (
+      <div
+        className={`flex shrink-0 items-center justify-between border-b border-bg-border px-3 py-2 ${
+          inputFocused ? "bg-transparent" : "bg-bg-panel"
+        }`}
+      >
+        {inputFocused ? (
+          <>
             <button
               type="button"
               onClick={() => inputRef.current?.blur()}
-              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
-              aria-label="閉じる"
+              className="text-sm font-bold text-neutral-200"
             >
-              閉じる
+              キャンセル
             </button>
-          ) : (
-            <>
+            <button
+              type="submit"
+              form="chat-form"
+              disabled={sending || !sanitizeBody(body)}
+              className="rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              送信
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="text-sm font-bold text-neutral-200">
+              ライブチャット
+            </div>
+            <div className="flex items-center gap-2">
               {onToggleExpand && (
                 <button
                   type="button"
@@ -330,23 +309,19 @@ export function Chat({
               >
                 設定変更
               </button>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
 
       <form
-        ref={formRef}
+        id="chat-form"
         onSubmit={handleSubmit}
-        className={`relative z-10 flex shrink-0 gap-2 ${
+        className={
           inputFocused
-            ? "order-5 border-t border-bg-border bg-bg-panel/90"
-            : "order-1 border-b border-bg-border bg-bg-panel"
-        } px-2 py-2`}
-        style={{
-          transform: formLift > 0 ? `translateY(-${formLift}px)` : undefined,
-          transition: "transform 150ms ease-out",
-        }}
+            ? "order-1 flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3"
+            : "order-1 flex shrink-0 gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        }
       >
         <input
           ref={inputRef}
@@ -356,35 +331,33 @@ export function Chat({
           onFocus={() => setInputFocused(true)}
           onBlur={() => setInputFocused(false)}
           maxLength={MAX_BODY_LENGTH}
-          placeholder="コメントを入力"
-          className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder={inputFocused ? "いまどうしてる?" : "コメントを入力"}
+          className={
+            inputFocused
+              ? "w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
+              : "flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          }
           disabled={sending}
         />
-        <button
-          type="submit"
-          disabled={sending || !sanitizeBody(body)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          送信
-        </button>
+        {!inputFocused && (
+          <button
+            type="submit"
+            disabled={sending || !sanitizeBody(body)}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            送信
+          </button>
+        )}
       </form>
 
-      {error && (
-        <div
-          className={`shrink-0 border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 ${
-            inputFocused ? "order-4 border-t" : "order-2 border-b"
-          }`}
-        >
+      {!inputFocused && error && (
+        <div className="order-2 shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
           {error}
         </div>
       )}
 
-      {showAdminBanner && latestAdminMessage && (
-        <div
-          className={`flex shrink-0 items-start gap-2 border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2 ${
-            inputFocused ? "order-2 border-b" : "order-3 border-b"
-          }`}
-        >
+      {!inputFocused && showAdminBanner && latestAdminMessage && (
+        <div className="order-3 flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
           <div className="min-w-0 flex-1 break-words text-sm">
             <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
               運営からのお知らせ
@@ -406,42 +379,40 @@ export function Chat({
         </div>
       )}
 
-      <div
-        className={`relative flex-1 min-h-0 ${
-          inputFocused ? "order-3" : "order-4"
-        }`}
-      >
-        <div
-          ref={listRef}
-          onScroll={handleScroll}
-          className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
-        >
-          {stream && !inputFocused && (
-            <div className="border-b border-bg-border md:hidden">
-              <StreamInfo stream={stream} playbackEnded={playbackEnded} />
-            </div>
-          )}
-          <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
-            ニックネームで参加できます。ログインは不要です。
-            <br />
-            荒らし・なりすまし・不適切投稿は運営判断で削除します。
-          </div>
-          {messages.map((m) => (
-            <MessageItem key={m.id} message={m} />
-          ))}
-          <div ref={bottomSentinelRef} aria-hidden className="h-1" />
-        </div>
-
-        {unreadCount > 0 && !inputFocused && (
-          <button
-            type="button"
-            onClick={jumpToBottom}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+      {!inputFocused && (
+        <div className="order-4 relative flex-1 min-h-0">
+          <div
+            ref={listRef}
+            onScroll={handleScroll}
+            className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
           >
-            ↓ 新着 {unreadCount}件
-          </button>
-        )}
-      </div>
+            {stream && (
+              <div className="border-b border-bg-border md:hidden">
+                <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+              </div>
+            )}
+            <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
+              ニックネームで参加できます。ログインは不要です。
+              <br />
+              荒らし・なりすまし・不適切投稿は運営判断で削除します。
+            </div>
+            {messages.map((m) => (
+              <MessageItem key={m.id} message={m} />
+            ))}
+            <div ref={bottomSentinelRef} aria-hidden className="h-1" />
+          </div>
+
+          {unreadCount > 0 && (
+            <button
+              type="button"
+              onClick={jumpToBottom}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+            >
+              ↓ 新着 {unreadCount}件
+            </button>
+          )}
+        </div>
+      )}
 
       {showSettings && (
         <ProfileSetup
