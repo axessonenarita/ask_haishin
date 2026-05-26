@@ -52,10 +52,30 @@ export function Chat({
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
   const [formLift, setFormLift] = useState(0);
+  const [overlayDims, setOverlayDims] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () =>
+      setOverlayDims({ top: vv.offsetTop, height: vv.height });
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   useEffect(() => {
     if (!inputFocused) {
@@ -267,40 +287,69 @@ export function Chat({
   );
 
   return (
-    <div className="flex h-full flex-col bg-bg-panel">
-      <div className="flex shrink-0 items-center justify-between border-b border-bg-border px-3 py-2">
+    <div
+      className={
+        inputFocused
+          ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-md"
+          : "flex h-full flex-col bg-bg-panel"
+      }
+      style={
+        inputFocused && overlayDims
+          ? { top: `${overlayDims.top}px`, height: `${overlayDims.height}px` }
+          : undefined
+      }
+    >
+      <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel/70 px-3 py-2">
         <div className="text-sm font-bold text-neutral-200">ライブチャット</div>
         <div className="flex items-center gap-2">
-          {onToggleExpand && (
+          {inputFocused ? (
             <button
               type="button"
-              onClick={onToggleExpand}
-              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
-              aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
+              onClick={() => inputRef.current?.blur()}
+              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+              aria-label="閉じる"
             >
-              {chatExpanded ? "縮小" : "拡大"}
+              閉じる
             </button>
+          ) : (
+            <>
+              {onToggleExpand && (
+                <button
+                  type="button"
+                  onClick={onToggleExpand}
+                  className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
+                  aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
+                >
+                  {chatExpanded ? "縮小" : "拡大"}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowSettings(true)}
+                className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+              >
+                設定変更
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={() => setShowSettings(true)}
-            className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
-          >
-            設定変更
-          </button>
         </div>
       </div>
 
       <form
         ref={formRef}
         onSubmit={handleSubmit}
-        className="relative z-10 flex shrink-0 gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        className={`relative z-10 flex shrink-0 gap-2 ${
+          inputFocused
+            ? "order-5 border-t border-bg-border bg-bg-panel/90"
+            : "order-1 border-b border-bg-border bg-bg-panel"
+        } px-2 py-2`}
         style={{
           transform: formLift > 0 ? `translateY(-${formLift}px)` : undefined,
           transition: "transform 150ms ease-out",
         }}
       >
         <input
+          ref={inputRef}
           type="text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -321,13 +370,21 @@ export function Chat({
       </form>
 
       {error && (
-        <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+        <div
+          className={`shrink-0 border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 ${
+            inputFocused ? "order-4 border-t" : "order-2 border-b"
+          }`}
+        >
           {error}
         </div>
       )}
 
       {showAdminBanner && latestAdminMessage && (
-        <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+        <div
+          className={`flex shrink-0 items-start gap-2 border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2 ${
+            inputFocused ? "order-2 border-b" : "order-3 border-b"
+          }`}
+        >
           <div className="min-w-0 flex-1 break-words text-sm">
             <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
               運営からのお知らせ
@@ -349,13 +406,17 @@ export function Chat({
         </div>
       )}
 
-      <div className="relative flex-1 min-h-0">
+      <div
+        className={`relative flex-1 min-h-0 ${
+          inputFocused ? "order-3" : "order-4"
+        }`}
+      >
         <div
           ref={listRef}
           onScroll={handleScroll}
           className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
         >
-          {stream && (
+          {stream && !inputFocused && (
             <div className="border-b border-bg-border md:hidden">
               <StreamInfo stream={stream} playbackEnded={playbackEnded} />
             </div>
