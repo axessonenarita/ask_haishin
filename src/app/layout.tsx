@@ -16,6 +16,7 @@ export const viewport: Viewport = {
   maximumScale: 1,
   viewportFit: "cover",
   themeColor: "#0f0f10",
+  interactiveWidget: "resizes-content",
 };
 
 const browserCheckScript = `

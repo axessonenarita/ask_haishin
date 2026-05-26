@@ -17,15 +17,18 @@ import {
 } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
 import { containsBannedWord, sanitizeBody } from "@/lib/validation";
-import type { Message, UserProfile } from "@/lib/types";
+import type { Message, Stream, UserProfile } from "@/lib/types";
 import { MessageItem } from "./MessageItem";
 import { ProfileSetup } from "./ProfileSetup";
+import { StreamInfo } from "./StreamInfo";
 
 const NEAR_BOTTOM_THRESHOLD_PX = 80;
 
 type Props = {
   profile: UserProfile;
   streamId: string;
+  stream?: Stream | null;
+  playbackEnded?: boolean;
   onProfileChange: (p: UserProfile) => void;
   chatExpanded?: boolean;
   onToggleExpand?: () => void;
@@ -34,6 +37,8 @@ type Props = {
 export function Chat({
   profile,
   streamId,
+  stream,
+  playbackEnded,
   onProfileChange,
   chatExpanded,
   onToggleExpand,
@@ -45,9 +50,28 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
+  const [bottomInset, setBottomInset] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      // iOS Safari の下部URLバーやキーボードで隠れる領域の高さ
+      const obscured = window.innerHeight - vv.height - vv.offsetTop;
+      setBottomInset(Math.max(0, obscured));
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   const latestAdminMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -249,6 +273,34 @@ export function Chat({
         </div>
       </div>
 
+      <form
+        onSubmit={handleSubmit}
+        className="flex gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+      >
+        <input
+          type="text"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          maxLength={MAX_BODY_LENGTH}
+          placeholder="コメントを入力"
+          className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={sending}
+        />
+        <button
+          type="submit"
+          disabled={sending || !sanitizeBody(body)}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          送信
+        </button>
+      </form>
+
+      {error && (
+        <div className="border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+          {error}
+        </div>
+      )}
+
       {showAdminBanner && latestAdminMessage && (
         <div className="flex items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
           <div className="min-w-0 flex-1 break-words text-sm">
@@ -276,9 +328,15 @@ export function Chat({
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
+          className="chat-scroll absolute left-0 right-0 top-0 overflow-y-auto pt-2 pb-4"
+          style={{ bottom: `${bottomInset}px` }}
         >
-          <div className="px-3 pb-2 text-[11px] leading-snug text-neutral-400">
+          {stream && (
+            <div className="border-b border-bg-border md:hidden">
+              <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+            </div>
+          )}
+          <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
             ニックネームで参加できます。ログインは不要です。
             <br />
             荒らし・なりすまし・不適切投稿は運営判断で削除します。
@@ -293,47 +351,13 @@ export function Chat({
           <button
             type="button"
             onClick={jumpToBottom}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+            className="absolute left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+            style={{ bottom: `${12 + bottomInset}px` }}
           >
             ↓ 新着 {unreadCount}件
           </button>
         )}
       </div>
-
-      {error && (
-        <div className="border-t border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
-          {error}
-        </div>
-      )}
-
-      <form
-        onSubmit={handleSubmit}
-        className="flex gap-2 border-t border-bg-border bg-bg-panel px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
-      >
-        <input
-          type="text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onFocus={(e) => {
-            const target = e.currentTarget;
-            // iOS Safari の下部URLバーやキーボードで入力欄が隠れるのを防ぐ
-            setTimeout(() => {
-              target.scrollIntoView({ block: "center", behavior: "smooth" });
-            }, 300);
-          }}
-          maxLength={MAX_BODY_LENGTH}
-          placeholder="コメントを入力"
-          className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={sending}
-        />
-        <button
-          type="submit"
-          disabled={sending || !sanitizeBody(body)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          送信
-        </button>
-      </form>
 
       {showSettings && (
         <ProfileSetup
