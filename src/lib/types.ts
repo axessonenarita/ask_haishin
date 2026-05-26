@@ -9,6 +9,7 @@ export type Message = {
   role: Role;
   created_at: string;
   deleted: boolean;
+  pinned: boolean;
   stream_id: string | null;
 };
 

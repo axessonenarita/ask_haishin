@@ -39,6 +39,7 @@ export async function POST(req: Request) {
   const color = p.color;
   const role = p.role as Role;
   const stream_id = typeof p.stream_id === "string" ? p.stream_id : "";
+  const pinned = p.pinned === true;
 
   if (!nickname) {
     return NextResponse.json({ error: "nickname required" }, { status: 400 });
@@ -58,11 +59,27 @@ export async function POST(req: Request) {
   if (!stream_id) {
     return NextResponse.json({ error: "stream_id required" }, { status: 400 });
   }
+  // pinned は admin/staff のみ許可
+  if (pinned && role !== "admin" && role !== "staff") {
+    return NextResponse.json(
+      { error: "pinned messages must be admin or staff" },
+      { status: 400 },
+    );
+  }
 
   const supabase = getAdminClient();
   const { data, error } = await supabase
     .from("messages")
-    .insert({ nickname, avatar, color, body, role, deleted: false, stream_id })
+    .insert({
+      nickname,
+      avatar,
+      color,
+      body,
+      role,
+      deleted: false,
+      pinned,
+      stream_id,
+    })
     .select()
     .single();
 

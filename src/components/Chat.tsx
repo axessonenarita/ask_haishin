@@ -75,10 +75,17 @@ export function Chat({
     };
   }, []);
 
+  // pinned された admin/staff コメントだけを上部のお知らせバナーに出す
   const latestAdminMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.role === "admin" && !m.deleted) return m;
+      if (
+        m.pinned &&
+        !m.deleted &&
+        (m.role === "admin" || m.role === "staff")
+      ) {
+        return m;
+      }
     }
     return null;
   }, [messages]);

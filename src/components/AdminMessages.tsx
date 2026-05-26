@@ -20,6 +20,7 @@ type FormState = {
   role: Role;
   body: string;
   stream_id: string;
+  pinned: boolean;
 };
 
 const initialForm: FormState = {
@@ -29,6 +30,7 @@ const initialForm: FormState = {
   role: "admin",
   body: "",
   stream_id: "",
+  pinned: false,
 };
 
 export function AdminMessages() {
@@ -96,10 +98,26 @@ export function AdminMessages() {
         setError(j.error || "投稿に失敗しました");
         return;
       }
-      setForm((f) => ({ ...f, body: "" }));
+      setForm((f) => ({ ...f, body: "", pinned: false }));
       void load();
     },
     [form, load],
+  );
+
+  const handleTogglePinned = useCallback(
+    async (id: string, next: boolean) => {
+      const res = await fetch(`/api/admin/messages/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pinned: next }),
+      });
+      if (!res.ok) {
+        setError("更新に失敗しました");
+        return;
+      }
+      void load();
+    },
+    [load],
   );
 
   const handleDelete = useCallback(
@@ -213,6 +231,22 @@ export function AdminMessages() {
             />
           </label>
 
+          {(form.role === "admin" || form.role === "staff") && (
+            <label className="flex items-center gap-2 text-sm md:col-span-2">
+              <input
+                type="checkbox"
+                checked={form.pinned}
+                onChange={(e) =>
+                  setForm({ ...form, pinned: e.target.checked })
+                }
+                className="h-4 w-4 accent-blue-500"
+              />
+              <span className="text-neutral-300">
+                このコメントを固定表示する(視聴ページ上部のお知らせ枠に出す)
+              </span>
+            </label>
+          )}
+
           <div className="md:col-span-2">
             <button
               type="submit"
@@ -259,6 +293,11 @@ export function AdminMessages() {
                     {!stream && m.stream_id && " ・ (削除済み配信)"}
                     {!m.stream_id && " ・ (配信なし)"}
                     {m.deleted && " ・ 削除済み"}
+                    {m.pinned && !m.deleted && (
+                      <span className="ml-1 rounded bg-role-adminGold/30 px-1 text-[10px] font-bold text-role-adminGold">
+                        固定中
+                      </span>
+                    )}
                   </div>
                   <div>
                     <span className="mr-1">{getAvatarEmoji(m.avatar)}</span>
@@ -273,13 +312,28 @@ export function AdminMessages() {
                   </div>
                 </div>
                 {!m.deleted && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(m.id)}
-                    className="rounded-md bg-red-600/20 px-2 py-1 text-xs text-red-300 hover:bg-red-600/40"
-                  >
-                    削除
-                  </button>
+                  <div className="flex shrink-0 flex-col gap-1">
+                    {(m.role === "admin" || m.role === "staff") && (
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePinned(m.id, !m.pinned)}
+                        className={`rounded-md px-2 py-1 text-xs ${
+                          m.pinned
+                            ? "bg-role-adminGold/30 text-role-adminGold hover:bg-role-adminGold/50"
+                            : "bg-bg-input text-neutral-300 hover:bg-neutral-700"
+                        }`}
+                      >
+                        {m.pinned ? "固定解除" : "固定する"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(m.id)}
+                      className="rounded-md bg-red-600/20 px-2 py-1 text-xs text-red-300 hover:bg-red-600/40"
+                    >
+                      削除
+                    </button>
+                  </div>
                 )}
               </li>
               );
