@@ -373,6 +373,20 @@ export function Chat({
             : undefined
         }
         aria-hidden={!inputFocused}
+        onMouseDown={(e) => {
+          // 入力欄やボタン以外のエリアをタップしても input から focus が
+          // 外れないようにする(iOS のデフォルト挙動の打ち消し)
+          const target = e.target as HTMLElement;
+          const tag = target.tagName;
+          if (
+            tag !== "INPUT" &&
+            tag !== "BUTTON" &&
+            tag !== "TEXTAREA" &&
+            !target.closest("button")
+          ) {
+            e.preventDefault();
+          }
+        }}
       >
         {inputFocused && (
           <div className="flex shrink-0 items-center justify-between border-b border-bg-border/60 bg-transparent px-3 py-2">
