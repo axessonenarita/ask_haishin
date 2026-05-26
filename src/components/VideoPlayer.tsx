@@ -75,6 +75,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const recoveryAttemptsRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
+  const exhaustedRef = useRef(false);
   // hls.js の autoLevelCapping を保持(-1 = 制限なし)。再生落ち時に
   // 段階的に下げ、再起動を跨いでも適用するため ref で持つ
   const autoLevelCapRef = useRef<number>(-1);
@@ -87,6 +88,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
     lastRecoveryAtRef.current = 0;
+    exhaustedRef.current = false;
     autoLevelCapRef.current = -1;
   }, [stream?.id]);
 
@@ -143,6 +145,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
     lastRecoveryAtRef.current = 0;
+    exhaustedRef.current = false;
     autoLevelCapRef.current = -1;
     setPlaybackKey((k) => k + 1);
   }, []);
@@ -246,6 +249,8 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       extra?: Record<string, unknown>,
     ) => {
       if (cancelled || cleanupInProgress) return;
+      // exhausted を一度通過したら、もう一度再生されるまで完全に静かにする
+      if (exhaustedRef.current) return;
 
       const sincePrev = Date.now() - lastRecoveryAtRef.current;
       if (sincePrev < RECOVERY_COOLDOWN_MS) return;
@@ -291,6 +296,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       };
 
       if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
+        exhaustedRef.current = true;
         setError("再生が安定しません。「もう一度再生」をお試しください。");
         trackEvent("playback_recovery_exhausted", {
           reason,
@@ -301,6 +307,19 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           new Error(`playback recovery exhausted: ${reason}`),
           sentryContext,
         );
+        // これ以上検査しても無意味なので stall / drift タイマーを停止
+        if (stallTimer) {
+          clearInterval(stallTimer);
+          stallTimer = null;
+        }
+        if (driftTimer) {
+          clearInterval(driftTimer);
+          driftTimer = null;
+        }
+        if (resetCounterTimer) {
+          clearTimeout(resetCounterTimer);
+          resetCounterTimer = null;
+        }
         return;
       }
       recoveryAttemptsRef.current++;
@@ -451,6 +470,13 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", handleVisibilityChange);
     }
+    // 連続して進行が確認できたチェック回数。一定回数を超えたら
+    // recoveryAttemptsRef を 0 に戻す(別ハンドラの handlePlaying 経由
+    // よりも確実)
+    let consecutiveProgressChecks = 0;
+    const PROGRESS_CHECKS_TO_RESET = Math.ceil(
+      RECOVERY_RESET_AFTER_MS / STALL_CHECK_INTERVAL_MS,
+    );
     stallTimer = setInterval(() => {
       if (cancelled) return;
       if (isHidden()) {
@@ -461,13 +487,23 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (video.paused || video.ended || video.error) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
+        consecutiveProgressChecks = 0;
         return;
       }
       if (video.currentTime > lastProgressTime + 0.1) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
+        consecutiveProgressChecks++;
+        if (
+          consecutiveProgressChecks >= PROGRESS_CHECKS_TO_RESET &&
+          recoveryAttemptsRef.current > 0
+        ) {
+          recoveryAttemptsRef.current = 0;
+        }
         return;
       }
+      // 進行していない
+      consecutiveProgressChecks = 0;
       if (Date.now() - lastProgressAt > STALL_THRESHOLD_MS) {
         lastProgressAt = Date.now();
         triggerFullRecovery("stall", {
