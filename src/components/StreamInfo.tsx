@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { Stream, StreamStatus } from "@/lib/types";
 import { effectiveStreamStatus } from "@/lib/streamStatus";
 import { useServerTime } from "@/lib/useServerTime";
@@ -43,6 +44,37 @@ function formatDateTime(iso: string): string {
   }
 }
 
+const URL_REGEX = /(https?:\/\/[^\s<>"'）)】」』]+[^\s<>"'）)】」』、。.,!?！？])/g;
+
+function renderWithLinks(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  URL_REGEX.lastIndex = 0;
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+    const url = match[0];
+    nodes.push(
+      <a
+        key={`${match.index}-${url}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-sky-400 underline break-all hover:text-sky-300"
+      >
+        {url}
+      </a>,
+    );
+    lastIndex = match.index + url.length;
+  }
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+  return nodes;
+}
+
 type Props = {
   stream: Stream;
   playbackEnded?: boolean;
@@ -83,7 +115,7 @@ export function StreamInfo({ stream, playbackEnded }: Props) {
 
       {stream.description && (
         <div className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-neutral-300">
-          {stream.description}
+          {renderWithLinks(stream.description)}
         </div>
       )}
     </div>
