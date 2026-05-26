@@ -232,7 +232,7 @@ export function Chat({
 
   return (
     <div className="flex h-full flex-col bg-bg-panel">
-      <div className="flex items-center justify-between border-b border-bg-border px-3 py-2">
+      <div className="flex shrink-0 items-center justify-between border-b border-bg-border px-3 py-2">
         <div className="text-sm font-bold text-neutral-200">ライブチャット</div>
         <div className="flex items-center gap-2">
           {onToggleExpand && (
@@ -255,38 +255,8 @@ export function Chat({
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="flex gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
-      >
-        <input
-          type="text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          maxLength={MAX_BODY_LENGTH}
-          placeholder="コメントを入力"
-          className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={sending}
-        />
-        <button
-          type="submit"
-          disabled={sending || !sanitizeBody(body)}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          送信
-        </button>
-      </form>
-
-      {error && (
-        <div className="border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
-          {error}
-        </div>
-      )}
-
       {showAdminBanner && latestAdminMessage && (
-        <div className="flex items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+        <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
           <div className="min-w-0 flex-1 break-words text-sm">
             <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
               運営からのお知らせ
@@ -340,6 +310,36 @@ export function Chat({
           </button>
         )}
       </div>
+
+      {error && (
+        <div className="shrink-0 border-t border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+          {error}
+        </div>
+      )}
+
+      <form
+        onSubmit={handleSubmit}
+        className="flex shrink-0 gap-2 border-t border-bg-border bg-bg-panel px-2 py-2"
+      >
+        <input
+          type="text"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onFocus={() => setInputFocused(true)}
+          onBlur={() => setInputFocused(false)}
+          maxLength={MAX_BODY_LENGTH}
+          placeholder="コメントを入力"
+          className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={sending}
+        />
+        <button
+          type="submit"
+          disabled={sending || !sanitizeBody(body)}
+          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          送信
+        </button>
+      </form>
 
       {showSettings && (
         <ProfileSetup

@@ -102,7 +102,7 @@ export function LivePage({ stream: initialStream }: Props) {
 
   return (
     <div
-      className="fixed inset-x-0 flex w-full flex-col bg-bg-base md:flex-row"
+      className="fixed inset-x-0 flex w-full flex-col overflow-hidden bg-bg-base md:flex-row"
       style={
         vvDims
           ? {
