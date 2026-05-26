@@ -13,6 +13,10 @@ const RESYNC_THRESHOLD_S = 10;
 const CATCH_UP_THRESHOLD_S = 3;
 const MANIFEST_WAIT_MS = 5000;
 const PLAY_RETRY_DELAY_MS = 400;
+const STALL_CHECK_INTERVAL_MS = 2000;
+const STALL_THRESHOLD_MS = 15000;
+const RECOVERY_RESET_AFTER_MS = 30000;
+const MAX_RECOVERY_ATTEMPTS = 3;
 
 type Phase =
   | "none"
@@ -66,6 +70,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const recoveryAttemptsRef = useRef(0);
 
   useEffect(() => {
     setMainEnded(false);
@@ -73,6 +78,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setError(null);
     setLoading(false);
     setNeedsUnmute(false);
+    recoveryAttemptsRef.current = 0;
   }, [stream?.id]);
 
   useEffect(() => {
@@ -126,6 +132,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const retry = useCallback(() => {
     setError(null);
     setNeedsUnmute(false);
+    recoveryAttemptsRef.current = 0;
     setPlaybackKey((k) => k + 1);
   }, []);
 
@@ -146,6 +153,10 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       onPlaybackEnded?.();
     }
   }, [phase, playbackEnded, onPlaybackEnded]);
+
+  useEffect(() => {
+    recoveryAttemptsRef.current = 0;
+  }, [phase]);
 
   const computeSyncTargetSec = useCallback((): number | null => {
     const video = videoRef.current;
@@ -210,6 +221,23 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     let cancelled = false;
     let hlsInstance: { destroy: () => void } | null = null;
     let driftTimer: ReturnType<typeof setInterval> | null = null;
+    let stallTimer: ReturnType<typeof setInterval> | null = null;
+    let resetCounterTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const triggerFullRecovery = (reason: string) => {
+      if (cancelled) return;
+      if (recoveryAttemptsRef.current >= MAX_RECOVERY_ATTEMPTS) {
+        setError("再生が安定しません。「もう一度再生」をお試しください。");
+        return;
+      }
+      recoveryAttemptsRef.current++;
+      if (typeof console !== "undefined") {
+        console.warn(
+          `[VideoPlayer] recovery (${reason}) attempt ${recoveryAttemptsRef.current}/${MAX_RECOVERY_ATTEMPTS}`,
+        );
+      }
+      setPlaybackKey((k) => k + 1);
+    };
 
     const startAtMs = new Date(stream.start_at).getTime();
     let src: string;
@@ -271,16 +299,52 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
     const handlePause = () => {
       if (video.ended) return;
+      if (video.error) return;
       void video.play().catch(() => {});
     };
     video.addEventListener("pause", handlePause);
 
     const handleWaiting = () => setLoading(true);
-    const handlePlaying = () => setLoading(false);
+    const handlePlaying = () => {
+      setLoading(false);
+      if (resetCounterTimer) clearTimeout(resetCounterTimer);
+      resetCounterTimer = setTimeout(() => {
+        if (cancelled) return;
+        if (!video.paused && !video.error) {
+          recoveryAttemptsRef.current = 0;
+        }
+      }, RECOVERY_RESET_AFTER_MS);
+    };
     const handleCanPlay = () => setLoading(false);
     video.addEventListener("waiting", handleWaiting);
     video.addEventListener("playing", handlePlaying);
     video.addEventListener("canplay", handleCanPlay);
+
+    const handleVideoError = () => {
+      triggerFullRecovery("video.error");
+    };
+    video.addEventListener("error", handleVideoError);
+
+    // stall検知: 再生中なのに currentTime が止まったままなら復旧
+    let lastProgressTime = video.currentTime;
+    let lastProgressAt = Date.now();
+    stallTimer = setInterval(() => {
+      if (cancelled) return;
+      if (video.paused || video.ended || video.error) {
+        lastProgressTime = video.currentTime;
+        lastProgressAt = Date.now();
+        return;
+      }
+      if (video.currentTime > lastProgressTime + 0.1) {
+        lastProgressTime = video.currentTime;
+        lastProgressAt = Date.now();
+        return;
+      }
+      if (Date.now() - lastProgressAt > STALL_THRESHOLD_MS) {
+        lastProgressAt = Date.now();
+        triggerFullRecovery("stall");
+      }
+    }, STALL_CHECK_INTERVAL_MS);
 
     setLoading(true);
 
@@ -326,6 +390,26 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           }
           const hls = new Hls({ enableWorker: true });
           hlsInstance = hls;
+
+          // hls.js 自体の fatal error をリカバリ
+          let hlsInPlaceRecoveryUsed = false;
+          hls.on(Hls.Events.ERROR, (_evt, data) => {
+            if (!data.fatal) return;
+            if (cancelled) return;
+            if (hlsInPlaceRecoveryUsed) {
+              triggerFullRecovery(`hls fatal ${data.type}`);
+              return;
+            }
+            hlsInPlaceRecoveryUsed = true;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              hls.startLoad();
+            } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              hls.recoverMediaError();
+            } else {
+              triggerFullRecovery(`hls fatal ${data.type}`);
+            }
+          });
+
           // マニフェストパース完了まで待ってから play する
           await new Promise<void>((resolve) => {
             let settled = false;
@@ -388,6 +472,8 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     return () => {
       cancelled = true;
       if (driftTimer) clearInterval(driftTimer);
+      if (stallTimer) clearInterval(stallTimer);
+      if (resetCounterTimer) clearTimeout(resetCounterTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
       video.removeEventListener("seeked", handleSeeked);
@@ -395,6 +481,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       video.removeEventListener("waiting", handleWaiting);
       video.removeEventListener("playing", handlePlaying);
       video.removeEventListener("canplay", handleCanPlay);
+      video.removeEventListener("error", handleVideoError);
       setLoading(false);
       video.loop = false;
       video.removeAttribute("src");
