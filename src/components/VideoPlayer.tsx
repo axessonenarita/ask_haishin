@@ -75,6 +75,9 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const recoveryAttemptsRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
+  // hls.js の autoLevelCapping を保持(-1 = 制限なし)。再生落ち時に
+  // 段階的に下げ、再起動を跨いでも適用するため ref で持つ
+  const autoLevelCapRef = useRef<number>(-1);
 
   useEffect(() => {
     setMainEnded(false);
@@ -84,6 +87,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
     lastRecoveryAtRef.current = 0;
+    autoLevelCapRef.current = -1;
   }, [stream?.id]);
 
   useEffect(() => {
@@ -139,6 +143,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     setNeedsUnmute(false);
     recoveryAttemptsRef.current = 0;
     lastRecoveryAtRef.current = 0;
+    autoLevelCapRef.current = -1;
     setPlaybackKey((k) => k + 1);
   }, []);
 
@@ -246,6 +251,27 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (sincePrev < RECOVERY_COOLDOWN_MS) return;
       lastRecoveryAtRef.current = Date.now();
 
+      // 再生落ち発生時に画質を 1 段下げる(次回 hls 生成時から適用)
+      const hls = hlsInstance as
+        | (typeof hlsInstance & {
+            currentLevel?: number;
+            autoLevelCapping?: number;
+            levels?: unknown[];
+          })
+        | null;
+      if (hls && typeof hls.currentLevel === "number") {
+        const currentMax =
+          autoLevelCapRef.current >= 0
+            ? autoLevelCapRef.current
+            : hls.currentLevel;
+        autoLevelCapRef.current = Math.max(0, currentMax - 1);
+      } else if (autoLevelCapRef.current === -1) {
+        // 万一情報が取れない場合は最低画質まで落とす
+        autoLevelCapRef.current = 0;
+      } else if (autoLevelCapRef.current > 0) {
+        autoLevelCapRef.current -= 1;
+      }
+
       const sentryContext = {
         level: "warning" as const,
         tags: {
@@ -258,6 +284,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           ...extra,
           attempt: recoveryAttemptsRef.current + 1,
           maxAttempts: MAX_RECOVERY_ATTEMPTS,
+          autoLevelCapping: autoLevelCapRef.current,
           userAgent:
             typeof navigator !== "undefined" ? navigator.userAgent : "",
         },
@@ -502,8 +529,22 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             setError("このブラウザではHLSを再生できません");
             return;
           }
-          const hls = new Hls({ enableWorker: true });
+          const hls = new Hls({
+            enableWorker: true,
+            // ABR を安定寄りにチューニング
+            abrEwmaDefaultEstimate: 500_000, // 初期帯域推定 500kbps(低めから入る)
+            abrBandWidthFactor: 0.9, // 利用可能帯域の判定を保守的に
+            abrBandWidthUpFactor: 0.7, // 上げる前にしっかり余裕がある時だけ
+            // バッファ
+            maxBufferLength: 30,
+            maxMaxBufferLength: 60,
+            backBufferLength: 30,
+          });
           hlsInstance = hls;
+          // 再生落ちで段階的に下げた autoLevelCap を新インスタンスにも反映
+          if (autoLevelCapRef.current >= 0) {
+            hls.autoLevelCapping = autoLevelCapRef.current;
+          }
 
           // hls.js 自体の fatal error をリカバリ
           let hlsInPlaceRecoveryUsed = false;
