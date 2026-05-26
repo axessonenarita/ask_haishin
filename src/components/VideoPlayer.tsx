@@ -565,7 +565,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           // hls.js 自体の fatal error をリカバリ
           let hlsInPlaceRecoveryUsed = false;
           hls.on(Hls.Events.ERROR, (_evt, data) => {
-            if (!data.fatal) return;
+            if (!data || !data.fatal) return;
             if (cancelled) return;
             const networkDetails = (
               data as unknown as {
