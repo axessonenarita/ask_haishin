@@ -20,16 +20,25 @@ const browserCheckScript = `
     new Function("var a = null; return a?.b ?? 0")();
     return;
   } catch (e) {}
-  var html = '' +
-    '<head><meta charset="utf-8"><title>非対応ブラウザ</title>' +
-    '<meta name="viewport" content="width=device-width, initial-scale=1"></head>' +
-    '<body style="margin:0;background:#0f0f10;color:#e5e5e5;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' +
-    '<div style="max-width:520px;margin:4rem auto;padding:0 1.5rem;line-height:1.7;">' +
-    '<h1 style="font-size:1.25rem;margin:0 0 1rem 0;">お使いのブラウザでは表示できません</h1>' +
-    '<p style="margin:0 0 0.75rem 0;">このページを利用するには、最新版の Chrome / Safari / Edge / Firefox をご利用ください。</p>' +
-    '<p style="margin:0;font-size:0.85rem;color:#888;">タブレットやスマートフォンの場合、設定アプリからシステムアップデートをご確認ください。</p>' +
-    '</div></body>';
-  document.documentElement.innerHTML = html;
+  function addBanner(){
+    if (!document.body) { setTimeout(addBanner, 50); return; }
+    if (document.getElementById('__old-browser-warning')) return;
+    var d = document.createElement('div');
+    d.id = '__old-browser-warning';
+    d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#7c2d12;color:#fff;padding:0.5rem 0.75rem;font-size:0.8rem;line-height:1.45;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;gap:0.5rem;align-items:flex-start;box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+    var msg = document.createElement('div');
+    msg.style.cssText = 'flex:1;min-width:0;';
+    msg.innerHTML = 'お使いのブラウザは古い可能性があります。一部の機能が正しく動作しないことがあります。Chrome / Safari / Edge / Firefox の最新版での閲覧をお勧めします。';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '閉じる';
+    btn.style.cssText = 'flex-shrink:0;background:transparent;border:1px solid rgba(255,255,255,0.6);color:#fff;padding:0.15rem 0.6rem;border-radius:3px;font-size:0.75rem;cursor:pointer;';
+    btn.onclick = function(){ d.parentNode && d.parentNode.removeChild(d); };
+    d.appendChild(msg);
+    d.appendChild(btn);
+    document.body.insertBefore(d, document.body.firstChild);
+  }
+  addBanner();
 })();
 `;
 
