@@ -260,7 +260,7 @@ export function Chat({
     <div
       className={
         inputFocused
-          ? "fixed inset-x-0 z-50 flex flex-col bg-black/70 backdrop-blur-md"
+          ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm"
           : "flex h-full flex-col bg-bg-panel"
       }
       style={
