@@ -200,56 +200,60 @@ export function Chat({
     };
   }, [streamId, isNearBottom]);
 
+  const submitMessage = useCallback(async () => {
+    setError(null);
+
+    const trimmed = sanitizeBody(body);
+    if (!trimmed) return;
+
+    if (containsBannedWord(trimmed)) {
+      setError("不適切な表現が含まれています");
+      return;
+    }
+
+    const lastStr = localStorage.getItem(LS_KEYS.lastPostAt);
+    const last = lastStr ? Number(lastStr) : 0;
+    const now = Date.now();
+    if (now - last < RATE_LIMIT_MS) {
+      const wait = Math.ceil((RATE_LIMIT_MS - (now - last)) / 1000);
+      setError(`連投はできません（あと${wait}秒）`);
+      return;
+    }
+
+    const wasAtBottom = isNearBottom();
+    setSending(true);
+    const { error: insertError } = await supabase.from("messages").insert({
+      nickname: profile.nickname,
+      avatar: profile.avatar,
+      color: profile.color,
+      body: trimmed,
+      role: "user",
+      deleted: false,
+      stream_id: streamId,
+    });
+    setSending(false);
+
+    if (insertError) {
+      setError("投稿に失敗しました");
+      return;
+    }
+
+    localStorage.setItem(LS_KEYS.lastPostAt, String(now));
+    setBody("");
+    trackEvent("message_post", { stream_id: streamId });
+    if (wasAtBottom) {
+      shouldScrollOnUpdateRef.current = true;
+    }
+    // 送信後はオーバーレイを閉じて動画視聴に戻す
+    inputRef.current?.blur();
+  }, [body, profile, streamId, isNearBottom]);
+
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
+    (e: React.FormEvent) => {
       e.preventDefault();
-      setError(null);
-
-      const trimmed = sanitizeBody(body);
-      if (!trimmed) return;
-
-      if (containsBannedWord(trimmed)) {
-        setError("不適切な表現が含まれています");
-        return;
-      }
-
-      const lastStr = localStorage.getItem(LS_KEYS.lastPostAt);
-      const last = lastStr ? Number(lastStr) : 0;
-      const now = Date.now();
-      if (now - last < RATE_LIMIT_MS) {
-        const wait = Math.ceil((RATE_LIMIT_MS - (now - last)) / 1000);
-        setError(`連投はできません（あと${wait}秒）`);
-        return;
-      }
-
-      const wasAtBottom = isNearBottom();
-      setSending(true);
-      const { error: insertError } = await supabase.from("messages").insert({
-        nickname: profile.nickname,
-        avatar: profile.avatar,
-        color: profile.color,
-        body: trimmed,
-        role: "user",
-        deleted: false,
-        stream_id: streamId,
-      });
-      setSending(false);
-
-      if (insertError) {
-        setError("投稿に失敗しました");
-        return;
-      }
-
-      localStorage.setItem(LS_KEYS.lastPostAt, String(now));
-      setBody("");
-      trackEvent("message_post", { stream_id: streamId });
-      if (wasAtBottom) {
-        shouldScrollOnUpdateRef.current = true;
-      }
-      // 送信後はオーバーレイを閉じて動画視聴に戻す
-      inputRef.current?.blur();
+      void submitMessage();
     },
-    [body, profile, streamId, isNearBottom],
+    [submitMessage],
   );
 
   return (
@@ -280,8 +284,11 @@ export function Chat({
               キャンセル
             </button>
             <button
-              type="submit"
-              form="chat-form"
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                void submitMessage();
+              }}
               disabled={sending || !sanitizeBody(body)}
               className="rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -353,8 +360,14 @@ export function Chat({
         </div>
       )}
 
-      {!inputFocused && error && (
-        <div className="order-2 shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+      {error && (
+        <div
+          className={`shrink-0 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 ${
+            inputFocused
+              ? "order-2 border-t border-b border-red-900"
+              : "order-2 border-b border-red-900"
+          }`}
+        >
           {error}
         </div>
       )}
