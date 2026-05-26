@@ -257,99 +257,35 @@ export function Chat({
   );
 
   return (
-    <div
-      className={
-        inputFocused
-          ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm"
-          : "flex h-full flex-col bg-bg-panel"
-      }
-      style={
-        inputFocused && overlayDims
-          ? { top: `${overlayDims.top}px`, height: `${overlayDims.height}px` }
-          : undefined
-      }
-    >
-      <div
-        className={`flex shrink-0 items-center justify-between border-b border-bg-border px-3 py-2 ${
-          inputFocused ? "bg-transparent" : "bg-bg-panel"
-        }`}
-      >
-        {inputFocused ? (
-          <>
-            <button
-              type="button"
-              onClick={() => inputRef.current?.blur()}
-              className="shrink-0 rounded-md px-3 py-1.5 text-sm font-bold text-neutral-200 hover:bg-white/10"
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                void submitMessage();
-              }}
-              disabled={sending || !sanitizeBody(body)}
-              className="shrink-0 rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              送信
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="text-sm font-bold text-neutral-200">
-              ライブチャット
-            </div>
-            <div className="flex items-center gap-2">
-              {onToggleExpand && (
-                <button
-                  type="button"
-                  onClick={onToggleExpand}
-                  className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
-                  aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
-                >
-                  {chatExpanded ? "縮小" : "拡大"}
-                </button>
-              )}
+    <>
+      {/* 通常チャット(常時レンダリング、オーバーレイ時は背後でブラーされる) */}
+      <div className="flex h-full flex-col bg-bg-panel">
+        <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel px-3 py-2">
+          <div className="text-sm font-bold text-neutral-200">
+            ライブチャット
+          </div>
+          <div className="flex items-center gap-2">
+            {onToggleExpand && (
               <button
                 type="button"
-                onClick={() => setShowSettings(true)}
-                className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+                onClick={onToggleExpand}
+                className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
+                aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
               >
-                設定変更
+                {chatExpanded ? "縮小" : "拡大"}
               </button>
-            </div>
-          </>
-        )}
-      </div>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowSettings(true)}
+              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+            >
+              設定変更
+            </button>
+          </div>
+        </div>
 
-      <form
-        id="chat-form"
-        onSubmit={handleSubmit}
-        className={
-          inputFocused
-            ? "order-1 flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3"
-            : "absolute -left-[9999px] h-0 w-0 overflow-hidden opacity-0"
-        }
-        aria-hidden={!inputFocused}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          maxLength={MAX_BODY_LENGTH}
-          placeholder="いまどうしてる?"
-          className="w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
-          disabled={sending}
-          tabIndex={inputFocused ? 0 : -1}
-        />
-      </form>
-
-      {!inputFocused && (
-        <div className="order-1 shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
+        <div className="shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
           <button
             type="button"
             onClick={() => inputRef.current?.focus()}
@@ -358,45 +294,39 @@ export function Chat({
             コメントする…
           </button>
         </div>
-      )}
 
-      {error && (
-        <div
-          className={`shrink-0 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 ${
-            inputFocused
-              ? "order-2 border-t border-b border-red-900"
-              : "order-2 border-b border-red-900"
-          }`}
-        >
-          {error}
-        </div>
-      )}
-
-      {!inputFocused && showAdminBanner && latestAdminMessage && (
-        <div className="order-3 flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
-          <div className="min-w-0 flex-1 break-words text-sm">
-            <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
-              運営からのお知らせ
-            </div>
-            <div>
-              <span className="mr-1">{latestAdminMessage.nickname}</span>
-              <span className="text-neutral-400">：</span>
-              <span className="text-neutral-100">{latestAdminMessage.body}</span>
-            </div>
+        {error && !inputFocused && (
+          <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+            {error}
           </div>
-          <button
-            type="button"
-            onClick={() => setDismissedAdminId(latestAdminMessage.id)}
-            className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
-            aria-label="お知らせを閉じる"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+        )}
 
-      {!inputFocused && (
-        <div className="order-4 relative flex-1 min-h-0">
+        {showAdminBanner && latestAdminMessage && (
+          <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+            <div className="min-w-0 flex-1 break-words text-sm">
+              <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
+                運営からのお知らせ
+              </div>
+              <div>
+                <span className="mr-1">{latestAdminMessage.nickname}</span>
+                <span className="text-neutral-400">：</span>
+                <span className="text-neutral-100">
+                  {latestAdminMessage.body}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedAdminId(latestAdminMessage.id)}
+              className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
+              aria-label="お知らせを閉じる"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        <div className="relative flex-1 min-h-0">
           <div
             ref={listRef}
             onScroll={handleScroll}
@@ -418,7 +348,7 @@ export function Chat({
             <div ref={bottomSentinelRef} aria-hidden className="h-1" />
           </div>
 
-          {unreadCount > 0 && (
+          {unreadCount > 0 && !inputFocused && (
             <button
               type="button"
               onClick={jumpToBottom}
@@ -428,7 +358,75 @@ export function Chat({
             </button>
           )}
         </div>
-      )}
+      </div>
+
+      {/* 入力フォーム + オーバーレイ(常時 DOM、フォーカス時のみ可視) */}
+      <div
+        className={
+          inputFocused
+            ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm"
+            : "pointer-events-none fixed -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0"
+        }
+        style={
+          inputFocused && overlayDims
+            ? { top: `${overlayDims.top}px`, height: `${overlayDims.height}px` }
+            : undefined
+        }
+        aria-hidden={!inputFocused}
+      >
+        {inputFocused && (
+          <div className="flex shrink-0 items-center justify-between border-b border-bg-border/60 bg-transparent px-3 py-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.blur()}
+              className="shrink-0 rounded-md px-3 py-1.5 text-sm font-bold text-neutral-200 hover:bg-white/10"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                void submitMessage();
+              }}
+              disabled={sending || !sanitizeBody(body)}
+              className="shrink-0 rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              送信
+            </button>
+          </div>
+        )}
+
+        <form
+          id="chat-form"
+          onSubmit={handleSubmit}
+          className={
+            inputFocused
+              ? "flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3"
+              : ""
+          }
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            maxLength={MAX_BODY_LENGTH}
+            placeholder="いまどうしてる?"
+            className="w-full bg-transparent text-lg text-white outline-none placeholder:text-neutral-500"
+            disabled={sending}
+            tabIndex={inputFocused ? 0 : -1}
+          />
+        </form>
+
+        {error && inputFocused && (
+          <div className="shrink-0 border-t border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+            {error}
+          </div>
+        )}
+      </div>
 
       {showSettings && (
         <ProfileSetup
@@ -442,6 +440,6 @@ export function Chat({
           onClose={() => setShowSettings(false)}
         />
       )}
-    </div>
+    </>
   );
 }
