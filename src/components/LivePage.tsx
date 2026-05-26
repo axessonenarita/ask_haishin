@@ -17,6 +17,10 @@ export function LivePage({ stream: initialStream }: Props) {
   const [stream, setStream] = useState<Stream | null>(initialStream);
   const [playbackEnded, setPlaybackEnded] = useState(false);
   const [chatExpanded, setChatExpanded] = useState(false);
+  const [vvDims, setVvDims] = useState<{
+    height: number;
+    offsetTop: number;
+  } | null>(null);
 
   useEffect(() => {
     setStream(initialStream);
@@ -25,6 +29,35 @@ export function LivePage({ stream: initialStream }: Props) {
   useEffect(() => {
     setPlaybackEnded(false);
   }, [stream?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () =>
+      setVvDims({ height: vv.height, offsetTop: vv.offsetTop });
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+
+  // body のスクロールを止めて、iOS Safari のキーボード展開時の
+  // ページ全体上方シフトを防ぐ
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.documentElement.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
 
   useEffect(() => {
     const id = stream?.id;
@@ -68,7 +101,17 @@ export function LivePage({ stream: initialStream }: Props) {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full flex-col bg-bg-base md:flex-row">
+    <div
+      className="fixed inset-x-0 flex w-full flex-col bg-bg-base md:flex-row"
+      style={
+        vvDims
+          ? {
+              top: `${vvDims.offsetTop}px`,
+              height: `${vvDims.height}px`,
+            }
+          : { top: 0, height: "100dvh" }
+      }
+    >
       <InAppBrowserNotice />
       <div
         className={`w-full min-w-0 flex-col md:flex md:flex-1 ${
