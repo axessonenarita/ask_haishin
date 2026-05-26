@@ -51,9 +51,45 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
+  const [formLift, setFormLift] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+
+  useEffect(() => {
+    if (!inputFocused) {
+      setFormLift(0);
+      return;
+    }
+    const measure = () => {
+      const form = formRef.current;
+      const vv = typeof window !== "undefined" ? window.visualViewport : null;
+      if (!form || !vv) return;
+      const rect = form.getBoundingClientRect();
+      const visibleBottom = vv.offsetTop + vv.height;
+      // iOS Safari の下部 URL バー(shrunk モード ~50px)が可視領域の
+      // 底に被さってくるので、余裕を持って 60px 上を「実質的な底」と
+      // みなして必要分だけ持ち上げる
+      const safeBottom = visibleBottom - 60;
+      const lift = rect.bottom - safeBottom;
+      setFormLift(lift > 0 ? lift : 0);
+    };
+    measure();
+    const t1 = window.setTimeout(measure, 100);
+    const t2 = window.setTimeout(measure, 350);
+    const t3 = window.setTimeout(measure, 700);
+    const vv = window.visualViewport;
+    vv?.addEventListener("resize", measure);
+    vv?.addEventListener("scroll", measure);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+      window.clearTimeout(t3);
+      vv?.removeEventListener("resize", measure);
+      vv?.removeEventListener("scroll", measure);
+    };
+  }, [inputFocused]);
 
   const latestAdminMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -256,8 +292,13 @@ export function Chat({
       </div>
 
       <form
+        ref={formRef}
         onSubmit={handleSubmit}
-        className="flex shrink-0 gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        className="relative z-10 flex shrink-0 gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        style={{
+          transform: formLift > 0 ? `translateY(-${formLift}px)` : undefined,
+          transition: "transform 150ms ease-out",
+        }}
       >
         <input
           type="text"
