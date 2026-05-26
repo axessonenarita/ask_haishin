@@ -314,6 +314,13 @@ export function Chat({
           type="text"
           value={body}
           onChange={(e) => setBody(e.target.value)}
+          onFocus={(e) => {
+            const target = e.currentTarget;
+            // iOS Safari の下部URLバーやキーボードで入力欄が隠れるのを防ぐ
+            setTimeout(() => {
+              target.scrollIntoView({ block: "center", behavior: "smooth" });
+            }, 300);
+          }}
           maxLength={MAX_BODY_LENGTH}
           placeholder="コメントを入力"
           className="flex-1 rounded-md bg-bg-input px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
