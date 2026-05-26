@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { trackEvent } from "@/lib/analytics";
 
 type AppType =
   | "line"
@@ -93,7 +94,11 @@ export function InAppBrowserNotice() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setType(detectInAppBrowser());
+    const detected = detectInAppBrowser();
+    setType(detected);
+    if (detected) {
+      trackEvent("inapp_browser_detected", { app: detected });
+    }
   }, []);
 
   if (!type || dismissed) return null;
@@ -101,6 +106,7 @@ export function InAppBrowserNotice() {
   const appName = APP_LABEL[type];
 
   const handleOpen = () => {
+    trackEvent("inapp_open_external", { app: type });
     tryOpenExternal(type);
   };
 

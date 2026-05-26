@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
+
+const GA_ID = process.env.NEXT_PUBLIC_GA_ID;
 
 export const metadata: Metadata = {
   title: "ASK ライブ配信",
@@ -53,6 +56,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: browserCheckScript }} />
       </head>
       <body>{children}</body>
+      {GA_ID && <GoogleAnalytics gaId={GA_ID} />}
     </html>
   );
 }
