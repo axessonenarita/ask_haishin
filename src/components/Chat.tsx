@@ -423,7 +423,19 @@ export function Chat({
           <textarea
             ref={inputRef}
             value={body}
-            onChange={(e) => setBody(e.target.value)}
+            onChange={(e) => {
+              // 連続改行(空行)を 1 つの改行に潰す。貼り付け対策も兼ねる
+              const next = e.target.value.replace(/\n{2,}/g, "\n");
+              setBody(next);
+            }}
+            onKeyDown={(e) => {
+              // 末尾が改行のときに Enter を押しても連打不可
+              if (e.key === "Enter" && !e.shiftKey) {
+                if (body.endsWith("\n") || body.length === 0) {
+                  e.preventDefault();
+                }
+              }
+            }}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             maxLength={MAX_BODY_LENGTH}
