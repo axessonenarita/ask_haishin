@@ -50,28 +50,9 @@ export function Chat({
   const [showSettings, setShowSettings] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
-  const [bottomInset, setBottomInset] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      // iOS Safari の下部URLバーやキーボードで隠れる領域の高さ
-      const obscured = window.innerHeight - vv.height - vv.offsetTop;
-      setBottomInset(Math.max(0, obscured));
-    };
-    update();
-    vv.addEventListener("resize", update);
-    vv.addEventListener("scroll", update);
-    return () => {
-      vv.removeEventListener("resize", update);
-      vv.removeEventListener("scroll", update);
-    };
-  }, []);
 
   const latestAdminMessage = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -328,8 +309,7 @@ export function Chat({
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="chat-scroll absolute left-0 right-0 top-0 overflow-y-auto pt-2 pb-4"
-          style={{ bottom: `${bottomInset}px` }}
+          className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
         >
           {stream && (
             <div className="border-b border-bg-border md:hidden">
@@ -351,8 +331,7 @@ export function Chat({
           <button
             type="button"
             onClick={jumpToBottom}
-            className="absolute left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
-            style={{ bottom: `${12 + bottomInset}px` }}
+            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
           >
             ↓ 新着 {unreadCount}件
           </button>
