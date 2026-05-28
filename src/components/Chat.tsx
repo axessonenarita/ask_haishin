@@ -51,10 +51,30 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
+  const [vvBottomOffset, setVvBottomOffset] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      // window 下端から visualViewport の下端までの距離
+      // (= キーボード + URL バー等で隠れている高さ)
+      const offset = window.innerHeight - vv.offsetTop - vv.height;
+      setVvBottomOffset(Math.max(0, offset));
+    };
+    update();
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
 
   // pinned された admin/staff コメントだけを上部のお知らせバナーに出す
   const latestAdminMessage = useMemo(() => {
@@ -271,7 +291,14 @@ export function Chat({
 
       <form
         onSubmit={handleSubmit}
-        className="flex shrink-0 items-end gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        className={
+          inputFocused
+            ? "fixed inset-x-0 z-50 flex items-end gap-2 border-y border-bg-border bg-bg-panel px-2 py-2 shadow-lg"
+            : "flex shrink-0 items-end gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+        }
+        style={
+          inputFocused ? { bottom: `${vvBottomOffset}px` } : undefined
+        }
       >
         <textarea
           ref={inputRef}
@@ -306,6 +333,11 @@ export function Chat({
           送信
         </button>
       </form>
+      {inputFocused && (
+        // form を fixed 化したことで通常フローから抜けるので、
+        // レイアウトが崩れないようにダミーで同等の高さを確保
+        <div className="shrink-0 h-[3.75rem] border-b border-bg-border" />
+      )}
 
       {error && (
         <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
