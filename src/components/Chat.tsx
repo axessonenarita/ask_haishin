@@ -367,11 +367,11 @@ export function Chat({
         </div>
       </div>
 
-      {/* 入力フォーム + オーバーレイ(常時 DOM、フォーカス時のみ可視) */}
+      {/* キーボード直上に貼り付く入力欄(透明オーバーレイの底だけが見える) */}
       <div
         className={
           inputFocused
-            ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm"
+            ? "pointer-events-none fixed inset-x-0 z-50 flex flex-col justify-end"
             : "pointer-events-none fixed -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0"
         }
         style={
@@ -380,53 +380,40 @@ export function Chat({
             : undefined
         }
         aria-hidden={!inputFocused}
-        onMouseDown={(e) => {
-          // 入力欄やボタン以外のエリアをタップしても input から focus が
-          // 外れないようにする(iOS のデフォルト挙動の打ち消し)
-          const target = e.target as HTMLElement;
-          const tag = target.tagName;
-          if (
-            tag !== "INPUT" &&
-            tag !== "BUTTON" &&
-            tag !== "TEXTAREA" &&
-            !target.closest("button")
-          ) {
-            e.preventDefault();
-          }
-        }}
       >
-        {inputFocused && (
-          <div className="flex shrink-0 items-center justify-between border-b border-bg-border/60 bg-transparent px-3 py-2">
-            <button
-              type="button"
-              onClick={() => inputRef.current?.blur()}
-              className="shrink-0 rounded-md px-3 py-1.5 text-sm font-bold text-neutral-200 hover:bg-white/10"
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => {
-                void submitMessage();
-              }}
-              disabled={sending || !sanitizeBody(body)}
-              className="shrink-0 rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              送信
-            </button>
+        {error && inputFocused && (
+          <div className="pointer-events-auto shrink-0 border-y border-red-900 bg-red-950/90 px-3 py-1.5 text-xs text-red-300">
+            {error}
           </div>
         )}
 
         <form
           id="chat-form"
           onSubmit={handleSubmit}
-          className={
-            inputFocused
-              ? "flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3 pb-3"
-              : ""
-          }
+          onMouseDown={(e) => {
+            // 入力欄やボタン以外のエリアをタップしても input から focus が
+            // 外れないようにする(iOS のデフォルト挙動の打ち消し)
+            const target = e.target as HTMLElement;
+            const tag = target.tagName;
+            if (
+              tag !== "INPUT" &&
+              tag !== "BUTTON" &&
+              tag !== "TEXTAREA" &&
+              !target.closest("button")
+            ) {
+              e.preventDefault();
+            }
+          }}
+          className="pointer-events-auto flex items-end gap-2 border-t border-bg-border bg-bg-panel px-2 py-2 shadow-lg"
         >
+          <button
+            type="button"
+            onClick={() => inputRef.current?.blur()}
+            className="shrink-0 rounded-md bg-bg-input px-2 py-2 text-xs text-neutral-300 hover:bg-neutral-700"
+            aria-label="閉じる"
+          >
+            ✕
+          </button>
           <textarea
             ref={inputRef}
             value={body}
@@ -446,34 +433,21 @@ export function Chat({
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
             maxLength={MAX_BODY_LENGTH}
+            rows={1}
             placeholder="配信にコメントを送ろう!"
-            className="min-h-0 w-full flex-1 resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
+            className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md bg-bg-input px-3 py-2 text-sm leading-relaxed text-white outline-none focus:ring-2 focus:ring-blue-500"
             disabled={sending}
             tabIndex={inputFocused ? 0 : -1}
           />
-          {inputFocused && (
-            <div className="mt-3 shrink-0 rounded-md border border-bg-border/60 bg-bg-panel/40 px-3 py-2 text-xs leading-relaxed text-neutral-300">
-              <div className="mb-1 font-bold text-neutral-200">
-                ↑ 操作は画面上部のボタンから
-              </div>
-              <div>
-                投稿するときは右上の
-                <span className="font-bold text-blue-400">「送信」</span>
-                、動画に戻るときは左上の
-                <span className="font-bold text-neutral-100">
-                  「キャンセル」
-                </span>
-                を押してください
-              </div>
-            </div>
-          )}
+          <button
+            type="submit"
+            onMouseDown={(e) => e.preventDefault()}
+            disabled={sending || !sanitizeBody(body)}
+            className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            送信
+          </button>
         </form>
-
-        {error && inputFocused && (
-          <div className="shrink-0 border-t border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
-            {error}
-          </div>
-        )}
       </div>
 
       {showSettings && (
