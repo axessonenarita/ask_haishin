@@ -51,7 +51,10 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
-  const [vvBottomOffset, setVvBottomOffset] = useState(0);
+  const [overlayDims, setOverlayDims] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
@@ -61,12 +64,8 @@ export function Chat({
     if (typeof window === "undefined") return;
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => {
-      // window 下端から visualViewport の下端までの距離
-      // (= キーボード + URL バー等で隠れている高さ)
-      const offset = window.innerHeight - vv.offsetTop - vv.height;
-      setVvBottomOffset(Math.max(0, offset));
-    };
+    const update = () =>
+      setOverlayDims({ top: vv.offsetTop, height: vv.height });
     update();
     vv.addEventListener("resize", update);
     vv.addEventListener("scroll", update);
@@ -265,139 +264,215 @@ export function Chat({
   );
 
   return (
-    <div className="flex h-full flex-col bg-bg-panel">
-      <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel px-3 py-2">
-        <div className="text-sm font-bold text-neutral-200">ライブチャット</div>
-        <div className="flex items-center gap-2">
-          {onToggleExpand && (
+    <>
+      {/* 通常チャット(常時レンダリング、オーバーレイ時は背後でブラーされる) */}
+      <div className="flex h-full flex-col bg-bg-panel">
+        <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel px-3 py-2">
+          <div className="text-sm font-bold text-neutral-200">
+            ライブチャット
+          </div>
+          <div className="flex items-center gap-2">
+            {onToggleExpand && (
+              <button
+                type="button"
+                onClick={onToggleExpand}
+                className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
+                aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
+              >
+                {chatExpanded ? "縮小" : "拡大"}
+              </button>
+            )}
             <button
               type="button"
-              onClick={onToggleExpand}
-              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
-              aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
+              onClick={() => setShowSettings(true)}
+              className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
             >
-              {chatExpanded ? "縮小" : "拡大"}
+              設定変更
             </button>
-          )}
+          </div>
+        </div>
+
+        <div className="shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
           <button
             type="button"
-            onClick={() => setShowSettings(true)}
-            className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
+            onClick={() => inputRef.current?.focus()}
+            className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700"
           >
-            設定変更
+            配信にコメントを送ろう!
           </button>
+        </div>
+
+        {error && !inputFocused && (
+          <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+            {error}
+          </div>
+        )}
+
+        {showAdminBanner && latestAdminMessage && (
+          <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+            <div className="min-w-0 flex-1 break-words text-sm">
+              <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
+                運営からのお知らせ
+              </div>
+              <div>
+                <span className="mr-1">{latestAdminMessage.nickname}</span>
+                <span className="text-neutral-400">：</span>
+                <span className="text-neutral-100">
+                  {latestAdminMessage.body}
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissedAdminId(latestAdminMessage.id)}
+              className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
+              aria-label="お知らせを閉じる"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        <div className="relative flex-1 min-h-0">
+          <div
+            ref={listRef}
+            onScroll={handleScroll}
+            className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
+          >
+            {stream && (
+              <div className="border-b border-bg-border md:hidden">
+                <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+              </div>
+            )}
+            <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
+              ニックネームで参加できます。ログインは不要です。
+              <br />
+              荒らし・なりすまし・不適切投稿は運営判断で削除します。
+            </div>
+            {messages.map((m) => (
+              <MessageItem key={m.id} message={m} />
+            ))}
+            <div ref={bottomSentinelRef} aria-hidden className="h-1" />
+          </div>
+
+          {unreadCount > 0 && !inputFocused && (
+            <button
+              type="button"
+              onClick={jumpToBottom}
+              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+            >
+              ↓ 新着 {unreadCount}件
+            </button>
+          )}
         </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
+      {/* 入力フォーム + オーバーレイ(常時 DOM、フォーカス時のみ可視) */}
+      <div
         className={
           inputFocused
-            ? "fixed inset-x-0 z-50 flex items-end gap-2 border-y border-bg-border bg-bg-panel px-2 py-2 shadow-lg"
-            : "flex shrink-0 items-end gap-2 border-b border-bg-border bg-bg-panel px-2 py-2"
+            ? "fixed inset-x-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm"
+            : "pointer-events-none fixed -left-[9999px] top-0 h-0 w-0 overflow-hidden opacity-0"
         }
         style={
-          inputFocused ? { bottom: `${vvBottomOffset}px` } : undefined
+          inputFocused && overlayDims
+            ? { top: `${overlayDims.top}px`, height: `${overlayDims.height}px` }
+            : undefined
         }
+        aria-hidden={!inputFocused}
+        onMouseDown={(e) => {
+          // 入力欄やボタン以外のエリアをタップしても input から focus が
+          // 外れないようにする(iOS のデフォルト挙動の打ち消し)
+          const target = e.target as HTMLElement;
+          const tag = target.tagName;
+          if (
+            tag !== "INPUT" &&
+            tag !== "BUTTON" &&
+            tag !== "TEXTAREA" &&
+            !target.closest("button")
+          ) {
+            e.preventDefault();
+          }
+        }}
       >
-        <textarea
-          ref={inputRef}
-          value={body}
-          onChange={(e) => {
-            // 連続改行(空行)を 1 つの改行に潰す。貼り付け対策も兼ねる
-            const next = e.target.value.replace(/\n{2,}/g, "\n");
-            setBody(next);
-          }}
-          onKeyDown={(e) => {
-            // 末尾が改行のときに Enter を押しても連打不可
-            if (e.key === "Enter" && !e.shiftKey) {
-              if (body.endsWith("\n") || body.length === 0) {
-                e.preventDefault();
-              }
-            }
-          }}
-          onFocus={() => setInputFocused(true)}
-          onBlur={() => setInputFocused(false)}
-          maxLength={MAX_BODY_LENGTH}
-          rows={1}
-          placeholder="配信にコメントを送ろう!"
-          className="max-h-32 min-h-[2.5rem] flex-1 resize-none rounded-md bg-bg-input px-3 py-2 text-sm leading-relaxed text-white outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={sending}
-        />
-        <button
-          type="submit"
-          onMouseDown={(e) => e.preventDefault()}
-          disabled={sending || !sanitizeBody(body)}
-          className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          送信
-        </button>
-      </form>
-      {inputFocused && (
-        // form を fixed 化したことで通常フローから抜けるので、
-        // レイアウトが崩れないようにダミーで同等の高さを確保
-        <div className="shrink-0 h-[3.75rem] border-b border-bg-border" />
-      )}
-
-      {error && (
-        <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
-          {error}
-        </div>
-      )}
-
-      {showAdminBanner && latestAdminMessage && (
-        <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
-          <div className="min-w-0 flex-1 break-words text-sm">
-            <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
-              運営からのお知らせ
-            </div>
-            <div>
-              <span className="mr-1">{latestAdminMessage.nickname}</span>
-              <span className="text-neutral-400">：</span>
-              <span className="text-neutral-100">{latestAdminMessage.body}</span>
-            </div>
+        {inputFocused && (
+          <div className="flex shrink-0 items-center justify-between border-b border-bg-border/60 bg-transparent px-3 py-2">
+            <button
+              type="button"
+              onClick={() => inputRef.current?.blur()}
+              className="shrink-0 rounded-md px-3 py-1.5 text-sm font-bold text-neutral-200 hover:bg-white/10"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                void submitMessage();
+              }}
+              disabled={sending || !sanitizeBody(body)}
+              className="shrink-0 rounded-full bg-blue-600 px-5 py-1.5 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              送信
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setDismissedAdminId(latestAdminMessage.id)}
-            className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
-            aria-label="お知らせを閉じる"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+        )}
 
-      <div className="relative flex-1 min-h-0">
-        <div
-          ref={listRef}
-          onScroll={handleScroll}
-          className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
+        <form
+          id="chat-form"
+          onSubmit={handleSubmit}
+          className={
+            inputFocused
+              ? "flex flex-1 min-h-0 flex-col bg-transparent px-4 pt-3 pb-3"
+              : ""
+          }
         >
-          {stream && (
-            <div className="border-b border-bg-border md:hidden">
-              <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+          <textarea
+            ref={inputRef}
+            value={body}
+            onChange={(e) => {
+              // 連続改行(空行)を 1 つの改行に潰す。貼り付け対策も兼ねる
+              const next = e.target.value.replace(/\n{2,}/g, "\n");
+              setBody(next);
+            }}
+            onKeyDown={(e) => {
+              // 末尾が改行のときに Enter を押しても連打不可
+              if (e.key === "Enter" && !e.shiftKey) {
+                if (body.endsWith("\n") || body.length === 0) {
+                  e.preventDefault();
+                }
+              }
+            }}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            maxLength={MAX_BODY_LENGTH}
+            placeholder="配信にコメントを送ろう!"
+            className="min-h-0 w-full flex-1 resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-neutral-500"
+            disabled={sending}
+            tabIndex={inputFocused ? 0 : -1}
+          />
+          {inputFocused && (
+            <div className="mt-3 shrink-0 rounded-md border border-bg-border/60 bg-bg-panel/40 px-3 py-2 text-xs leading-relaxed text-neutral-300">
+              <div className="mb-1 font-bold text-neutral-200">
+                ↑ 操作は画面上部のボタンから
+              </div>
+              <div>
+                投稿するときは右上の
+                <span className="font-bold text-blue-400">「送信」</span>
+                、動画に戻るときは左上の
+                <span className="font-bold text-neutral-100">
+                  「キャンセル」
+                </span>
+                を押してください
+              </div>
             </div>
           )}
-          <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
-            ニックネームで参加できます。ログインは不要です。
-            <br />
-            荒らし・なりすまし・不適切投稿は運営判断で削除します。
-          </div>
-          {messages.map((m) => (
-            <MessageItem key={m.id} message={m} />
-          ))}
-          <div ref={bottomSentinelRef} aria-hidden className="h-1" />
-        </div>
+        </form>
 
-        {unreadCount > 0 && !inputFocused && (
-          <button
-            type="button"
-            onClick={jumpToBottom}
-            className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
-          >
-            ↓ 新着 {unreadCount}件
-          </button>
+        {error && inputFocused && (
+          <div className="shrink-0 border-t border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+            {error}
+          </div>
         )}
       </div>
 
@@ -413,6 +488,6 @@ export function Chat({
           onClose={() => setShowSettings(false)}
         />
       )}
-    </div>
+    </>
   );
 }
