@@ -7,7 +7,7 @@ import type { Stream } from "@/lib/types";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
 
 const INTERVAL_VIDEO_URL =
-  "https://vz-99df5632-92b.b-cdn.net/5d8cd7a4-9970-4c3e-bb01-f8392231de31/playlist.m3u8";
+  "https://vz-d638cbc7-5d7.b-cdn.net/7ab35dad-09aa-4ce4-86dc-37d73505dc66/playlist.m3u8";
 const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
 const INTERMISSION_LEAD_MS = 15 * 1000;
 // メイン配信の終了を検知してからこの時間経過したら自動的に ended にする
