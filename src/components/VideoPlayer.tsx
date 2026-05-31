@@ -10,6 +10,8 @@ const INTERVAL_VIDEO_URL =
   "https://vz-99df5632-92b.b-cdn.net/5d8cd7a4-9970-4c3e-bb01-f8392231de31/playlist.m3u8";
 const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
 const INTERMISSION_LEAD_MS = 15 * 1000;
+// 配信開始から 24 時間経ったら自動的に終了扱い
+const AUTO_END_AFTER_START_MS = 24 * 60 * 60 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 10;
 const CATCH_UP_THRESHOLD_S = 3;
@@ -139,8 +141,11 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (!stream) return "none";
     if (stream.status === "ended" || playbackEnded || postRollEnded)
       return "ended";
-    if (mainEnded) return "postRoll";
     const startMs = new Date(stream.start_at).getTime();
+    // 配信開始から 24 時間経ったら、管理画面で ended にしていなくても
+    // 自動的に終了扱いにする
+    if (now - startMs > AUTO_END_AFTER_START_MS) return "ended";
+    if (mainEnded) return "postRoll";
     if (now >= startMs) return "live";
     if (now >= startMs - INTERMISSION_LEAD_MS) return "intermission";
     if (now >= startMs - PRE_ROLL_LEAD_MS) return "preRoll";
