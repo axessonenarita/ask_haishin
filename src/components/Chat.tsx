@@ -1,5 +1,6 @@
 "use client";
 
+import * as Sentry from "@sentry/nextjs";
 import {
   useCallback,
   useEffect,
@@ -132,45 +133,70 @@ export function Chat({
     }
   }, [messages]);
 
+  // Realtime 取りこぼし対策: 最新の created_at より新しいメッセージを
+  // fetch してリストに追加する共通処理。
+  // - タブ復帰時 (visibilitychange)
+  // - 30 秒ごとの周期ポーリング(セーフティネット)
+  // - Realtime チャネルが切れた瞬間
+  // から呼ばれる
+  const fetchMissingMessages = useCallback(async () => {
+    const since = latestCreatedAtRef.current;
+    let query = supabase
+      .from("messages")
+      .select("*")
+      .eq("deleted", false)
+      .eq("stream_id", streamId);
+    if (since) {
+      query = query.gt("created_at", since);
+    }
+    const { data } = await query
+      .order("created_at", { ascending: true })
+      .limit(INITIAL_LOAD_LIMIT);
+    if (!data || data.length === 0) return;
+
+    const wasAtBottom = isNearBottom();
+    setMessages((prev) => {
+      const existingIds = new Set(prev.map((m) => m.id));
+      const newOnes = (data as Message[]).filter(
+        (m) => !existingIds.has(m.id),
+      );
+      if (newOnes.length === 0) return prev;
+      if (wasAtBottom) {
+        shouldScrollOnUpdateRef.current = true;
+      } else {
+        setUnreadCount((c) => c + newOnes.length);
+      }
+      return [...prev, ...newOnes];
+    });
+  }, [streamId, isNearBottom]);
+
   // タブ復帰時に Realtime で取りこぼした分を fetch して追加
   useEffect(() => {
     if (typeof document === "undefined") return;
-    const onVisible = async () => {
+    const onVisible = () => {
       if (document.visibilityState !== "visible") return;
-      const since = latestCreatedAtRef.current;
-      let query = supabase
-        .from("messages")
-        .select("*")
-        .eq("deleted", false)
-        .eq("stream_id", streamId);
-      if (since) {
-        query = query.gt("created_at", since);
-      }
-      const { data } = await query
-        .order("created_at", { ascending: true })
-        .limit(INITIAL_LOAD_LIMIT);
-      if (!data || data.length === 0) return;
-
-      const wasAtBottom = isNearBottom();
-      setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
-        const newOnes = (data as Message[]).filter(
-          (m) => !existingIds.has(m.id),
-        );
-        if (newOnes.length === 0) return prev;
-        if (wasAtBottom) {
-          shouldScrollOnUpdateRef.current = true;
-        } else {
-          setUnreadCount((c) => c + newOnes.length);
-        }
-        return [...prev, ...newOnes];
-      });
+      void fetchMissingMessages();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [streamId, isNearBottom]);
+  }, [fetchMissingMessages]);
+
+  // 30 秒ごとの周期ポーリング(Realtime が静かに死んでた時のセーフティネット)
+  // タブが hidden の時は走らせない(リソース節約)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (
+        typeof document !== "undefined" &&
+        document.visibilityState === "hidden"
+      ) {
+        return;
+      }
+      void fetchMissingMessages();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchMissingMessages]);
 
   const jumpToBottom = useCallback(() => {
     performScrollToBottom();
@@ -252,13 +278,26 @@ export function Chat({
           );
         },
       )
-      .subscribe();
+      .subscribe((status) => {
+        // チャネルが切れた瞬間に Sentry に通知 & 取りこぼしを fetch
+        if (
+          status === "CHANNEL_ERROR" ||
+          status === "TIMED_OUT" ||
+          status === "CLOSED"
+        ) {
+          Sentry.captureMessage(`Realtime channel ${status}`, {
+            level: "warning",
+            tags: { stream_id: streamId },
+          });
+          void fetchMissingMessages();
+        }
+      });
 
     return () => {
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [streamId, isNearBottom]);
+  }, [streamId, isNearBottom, fetchMissingMessages]);
 
   const submitMessage = useCallback(async () => {
     setError(null);
