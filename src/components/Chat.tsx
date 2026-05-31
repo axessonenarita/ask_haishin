@@ -252,7 +252,10 @@ export function Chat({
       shouldScrollOnUpdateRef.current = true;
     }
     // 送信後はオーバーレイを閉じて動画視聴に戻す
+    // 一部ブラウザ(Vivaldi 等)で blur() が反映されない / onBlur が
+    // 発火しないことがあるので、state も明示的に false にする
     inputRef.current?.blur();
+    setInputFocused(false);
   }, [body, profile, streamId, isNearBottom]);
 
   const handleSubmit = useCallback(
@@ -411,7 +414,12 @@ export function Chat({
         >
           <button
             type="button"
-            onClick={() => inputRef.current?.blur()}
+            onClick={() => {
+              // 一部ブラウザで blur() だけだと onBlur が発火しないので
+              // state を直接落としてオーバーレイを確実に閉じる
+              inputRef.current?.blur();
+              setInputFocused(false);
+            }}
             className="shrink-0 rounded-md bg-bg-input px-3 py-2 text-sm font-bold text-neutral-300 hover:bg-neutral-700"
             aria-label="閉じる"
           >
