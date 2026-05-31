@@ -10,8 +10,8 @@ const INTERVAL_VIDEO_URL =
   "https://vz-99df5632-92b.b-cdn.net/5d8cd7a4-9970-4c3e-bb01-f8392231de31/playlist.m3u8";
 const PRE_ROLL_LEAD_MS = 30 * 60 * 1000;
 const INTERMISSION_LEAD_MS = 15 * 1000;
-// 配信開始から 24 時間経ったら自動的に終了扱い
-const AUTO_END_AFTER_START_MS = 24 * 60 * 60 * 1000;
+// メイン配信の終了を検知してからこの時間経過したら自動的に ended にする
+const AUTO_END_AFTER_MAIN_END_MS = 2 * 60 * 60 * 1000;
 const RESYNC_INTERVAL_MS = 15000;
 const RESYNC_THRESHOLD_S = 10;
 const CATCH_UP_THRESHOLD_S = 3;
@@ -67,6 +67,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const now = useServerTime();
   const [joined, setJoined] = useState(false);
   const [mainEnded, setMainEnded] = useState(false);
+  const [mainEndedAt, setMainEndedAt] = useState<number | null>(null);
   const [postRollEnded, setPostRollEnded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -83,6 +84,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
 
   useEffect(() => {
     setMainEnded(false);
+    setMainEndedAt(null);
     setPostRollEnded(false);
     setError(null);
     setLoading(false);
@@ -141,16 +143,20 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     if (!stream) return "none";
     if (stream.status === "ended" || playbackEnded || postRollEnded)
       return "ended";
-    const startMs = new Date(stream.start_at).getTime();
-    // 配信開始から 24 時間経ったら、管理画面で ended にしていなくても
-    // 自動的に終了扱いにする
-    if (now - startMs > AUTO_END_AFTER_START_MS) return "ended";
+    // メイン配信終了を検知してから一定時間経ったら自動的に ended にする
+    if (
+      mainEndedAt !== null &&
+      now - mainEndedAt > AUTO_END_AFTER_MAIN_END_MS
+    ) {
+      return "ended";
+    }
     if (mainEnded) return "postRoll";
+    const startMs = new Date(stream.start_at).getTime();
     if (now >= startMs) return "live";
     if (now >= startMs - INTERMISSION_LEAD_MS) return "intermission";
     if (now >= startMs - PRE_ROLL_LEAD_MS) return "preRoll";
     return "farWaiting";
-  }, [stream, now, mainEnded, postRollEnded, playbackEnded]);
+  }, [stream, now, mainEnded, mainEndedAt, postRollEnded, playbackEnded]);
 
   useEffect(() => {
     if (phase === "ended" && !playbackEnded) {
@@ -371,6 +377,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     const handleEnded = () => {
       if (phase === "live") {
         setMainEnded(true);
+        setMainEndedAt(Date.now());
       } else if (phase === "postRoll") {
         setPostRollEnded(true);
       }
