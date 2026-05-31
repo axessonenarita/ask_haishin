@@ -296,7 +296,10 @@ export function Chat({
           <button
             type="button"
             onClick={() => inputRef.current?.focus()}
-            className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700"
+            disabled={inputFocused}
+            aria-hidden={inputFocused}
+            tabIndex={inputFocused ? -1 : 0}
+            className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-bg-input"
           >
             配信にコメントを送ろう!
           </button>
