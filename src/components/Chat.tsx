@@ -51,6 +51,9 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
+  const [exitState, setExitState] = useState<
+    "idle" | "confirming" | "fallback"
+  >("idle");
   const [overlayDims, setOverlayDims] = useState<{
     top: number;
     height: number;
@@ -342,6 +345,18 @@ export function Chat({
             >
               設定変更
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                trackEvent("exit_click", { stream_id: streamId });
+                inputRef.current?.blur();
+                setInputFocused(false);
+                setExitState("confirming");
+              }}
+              className="rounded-md bg-red-900/40 px-2 py-1 text-xs font-bold text-red-300 hover:bg-red-900/70"
+            >
+              退出
+            </button>
           </div>
         </div>
 
@@ -522,6 +537,85 @@ export function Chat({
           }}
           onClose={() => setShowSettings(false)}
         />
+      )}
+
+      {exitState !== "idle" && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="exit-dialog-title"
+        >
+          <div className="w-full max-w-md rounded-xl bg-bg-panel p-6 shadow-2xl">
+            {exitState === "confirming" ? (
+              <>
+                <h2
+                  id="exit-dialog-title"
+                  className="mb-3 text-base font-bold text-neutral-100"
+                >
+                  配信から退出しますか?
+                </h2>
+                <p className="mb-5 text-sm text-neutral-300">
+                  視聴を終了して、このタブを閉じます。
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackEvent("exit_cancel", { stream_id: streamId });
+                      setExitState("idle");
+                    }}
+                    className="rounded-md bg-bg-input px-4 py-2 text-sm font-bold text-neutral-200 hover:bg-neutral-700"
+                  >
+                    キャンセル
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackEvent("exit_confirm", { stream_id: streamId });
+                      try {
+                        window.close();
+                      } catch {
+                        // 一部環境で例外を投げることがあるので捕まえる
+                      }
+                      setExitState("fallback");
+                    }}
+                    className="rounded-md bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-500"
+                  >
+                    退出する
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2
+                  id="exit-dialog-title"
+                  className="mb-3 text-base font-bold text-neutral-100"
+                >
+                  ご視聴ありがとうございました
+                </h2>
+                <p className="mb-5 text-sm leading-relaxed text-neutral-300">
+                  ブラウザの ✕ (タブを閉じる)、またはアプリの戻るボタンで
+                  終了してください。
+                </p>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      trackEvent("exit_fallback_back", {
+                        stream_id: streamId,
+                      });
+                      setExitState("idle");
+                    }}
+                    className="rounded-md bg-bg-input px-4 py-2 text-sm font-bold text-neutral-200 hover:bg-neutral-700"
+                  >
+                    配信に戻る
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </>
   );
