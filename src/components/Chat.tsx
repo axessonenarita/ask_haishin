@@ -59,6 +59,8 @@ export function Chat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const bottomSentinelRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnUpdateRef = useRef(false);
+  // 最新メッセージの created_at を ref で保持(タブ復帰時の差分 fetch 用)
+  const latestCreatedAtRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -120,6 +122,53 @@ export function Chat({
     setUnreadCount(0);
   }, [messages, performScrollToBottom]);
 
+  // 最新メッセージの created_at を ref に同期
+  useEffect(() => {
+    if (messages.length > 0) {
+      latestCreatedAtRef.current = messages[messages.length - 1].created_at;
+    }
+  }, [messages]);
+
+  // タブ復帰時に Realtime で取りこぼした分を fetch して追加
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const onVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+      const since = latestCreatedAtRef.current;
+      let query = supabase
+        .from("messages")
+        .select("*")
+        .eq("deleted", false)
+        .eq("stream_id", streamId);
+      if (since) {
+        query = query.gt("created_at", since);
+      }
+      const { data } = await query
+        .order("created_at", { ascending: true })
+        .limit(INITIAL_LOAD_LIMIT);
+      if (!data || data.length === 0) return;
+
+      const wasAtBottom = isNearBottom();
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newOnes = (data as Message[]).filter(
+          (m) => !existingIds.has(m.id),
+        );
+        if (newOnes.length === 0) return prev;
+        if (wasAtBottom) {
+          shouldScrollOnUpdateRef.current = true;
+        } else {
+          setUnreadCount((c) => c + newOnes.length);
+        }
+        return [...prev, ...newOnes];
+      });
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [streamId, isNearBottom]);
+
   const jumpToBottom = useCallback(() => {
     performScrollToBottom();
     requestAnimationFrame(performScrollToBottom);
@@ -137,6 +186,7 @@ export function Chat({
     setMessages([]);
     setUnreadCount(0);
     setDismissedAdminId(null);
+    latestCreatedAtRef.current = null;
 
     (async () => {
       const { data, error } = await supabase
