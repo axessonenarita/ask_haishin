@@ -762,7 +762,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         </div>
       )}
 
-      {!joined && (
+      {!joined && stream?.status !== "ended" && phase !== "ended" && (
         <button
           type="button"
           onClick={() => {
