@@ -36,7 +36,7 @@ export const BANNED_WORDS = ["荒らし", "死ね", "殺す"];
 export const RATE_LIMIT_MS = 5000;
 export const MAX_BODY_LENGTH = 300;
 export const MAX_NICKNAME_LENGTH = 20;
-export const INITIAL_LOAD_LIMIT = 30;
+export const INITIAL_LOAD_LIMIT = 100;
 
 export const LS_KEYS = {
   nickname: "ask_haishin_nickname",
