@@ -412,7 +412,7 @@ export function Chat({
           <button
             type="button"
             onClick={() => inputRef.current?.blur()}
-            className="shrink-0 rounded-md bg-bg-input px-2 py-2 text-xs text-neutral-300 hover:bg-neutral-700"
+            className="shrink-0 rounded-md bg-bg-input px-3 py-2 text-sm font-bold text-neutral-300 hover:bg-neutral-700"
             aria-label="閉じる"
           >
             ✕
