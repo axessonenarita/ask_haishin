@@ -1,9 +1,7 @@
-import { LivePage } from "@/components/LivePage";
-import { fetchActiveStream } from "@/lib/streamQuery";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const stream = await fetchActiveStream();
-  return <LivePage stream={stream} />;
+export default function Page() {
+  notFound();
 }
