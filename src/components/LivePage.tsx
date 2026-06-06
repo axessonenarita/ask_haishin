@@ -84,6 +84,33 @@ export function LivePage({ stream: initialStream }: Props) {
     };
   }, [stream?.id]);
 
+  // 視聴者カウント用: Realtime Presence チャネルに自分を track する
+  // 管理画面側で同じチャネルを購読して count を表示する
+  useEffect(() => {
+    const id = stream?.id;
+    if (!id) return;
+
+    const presenceKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+
+    const channel = supabase.channel(`presence-stream-${id}`, {
+      config: { presence: { key: presenceKey } },
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        await channel.track({ at: new Date().toISOString() });
+      }
+    });
+
+    return () => {
+      void channel.untrack();
+      supabase.removeChannel(channel);
+    };
+  }, [stream?.id]);
+
   const handlePlaybackEnded = useCallback(() => {
     setPlaybackEnded(true);
   }, []);

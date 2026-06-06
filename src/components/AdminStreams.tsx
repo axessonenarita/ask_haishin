@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase/client";
 import type { Stream, StreamStatus } from "@/lib/types";
 
 const STATUSES: StreamStatus[] = ["waiting", "live", "ended"];
@@ -301,6 +302,7 @@ export function AdminStreams() {
                     <div className="mt-1 text-xs text-neutral-400">
                       開始：{new Date(s.start_at).toLocaleString("ja-JP")}
                     </div>
+                    <ViewerCount streamId={s.id} />
                     <StreamUrl slug={s.slug} />
                     <div className="mt-1 break-all text-[11px] text-neutral-500">
                       {s.hls_url}
@@ -392,6 +394,41 @@ function StreamUrl({ slug }: { slug: string }) {
       >
         {copied ? "コピー済" : "URLコピー"}
       </button>
+    </div>
+  );
+}
+
+function ViewerCount({ streamId }: { streamId: string }) {
+  const [count, setCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    // 自分は track() しないので presence count には影響しない
+    const channel = supabase.channel(`presence-stream-${streamId}`, {
+      config: {
+        presence: {
+          key: `admin-observer-${Date.now()}-${Math.random()}`,
+        },
+      },
+    });
+
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      setCount(Object.keys(state).length);
+    });
+
+    channel.subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [streamId]);
+
+  return (
+    <div className="mt-1 flex items-center gap-1 text-xs text-neutral-300">
+      <span>👥 同時視聴</span>
+      <span className="rounded bg-blue-600/20 px-1.5 py-0.5 font-bold text-blue-300">
+        {count === null ? "—" : `${count} 人`}
+      </span>
     </div>
   );
 }
