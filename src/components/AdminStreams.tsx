@@ -419,7 +419,7 @@ function StreamCard({
             <span className="text-neutral-600">HLS:</span> {s.hls_url}
           </div>
         </div>
-        <ViewerCount streamId={s.id} />
+        <ViewerCount stream={s} />
       </div>
 
       <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -702,11 +702,11 @@ function StreamUrl({ slug }: { slug: string }) {
   );
 }
 
-function ViewerCount({ streamId }: { streamId: string }) {
+function ViewerCount({ stream }: { stream: Stream }) {
   const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
-    const channel = supabase.channel(`presence-stream-${streamId}`, {
+    const channel = supabase.channel(`presence-stream-${stream.id}`, {
       config: {
         presence: {
           key: `admin-observer-${Date.now()}-${Math.random()}`,
@@ -724,22 +724,57 @@ function ViewerCount({ streamId }: { streamId: string }) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [streamId]);
+  }, [stream.id]);
+
+  const config = {
+    boostStart:
+      stream.inflation_boost_start ?? VIEWER_COUNT_CONFIG.boostStart,
+    realMax: stream.inflation_real_max ?? VIEWER_COUNT_CONFIG.realMax,
+    targetMax:
+      stream.inflation_target_max ?? VIEWER_COUNT_CONFIG.targetMax,
+  };
+  const inflated =
+    count === null ? null : inflateViewerCount(count, config);
+  const ratio =
+    count === null || count === 0 || inflated === null
+      ? null
+      : inflated / count;
 
   return (
-    <div className="flex shrink-0 items-center gap-2 rounded-md bg-blue-600/10 px-3 py-1.5">
-      <span className="text-xl">👥</span>
-      <div className="flex flex-col">
-        <span className="text-[10px] uppercase tracking-wide text-blue-300">
-          同時視聴
-        </span>
-        <span className="text-base font-bold leading-none text-blue-200 tabular-nums">
-          {count === null ? "—" : `${count}`}
-          <span className="ml-0.5 text-[10px] font-normal text-blue-300">
-            人
+    <div className="flex shrink-0 items-stretch gap-px overflow-hidden rounded-md bg-bg-input/40">
+      <div className="flex items-center gap-2 bg-blue-600/15 px-3 py-1.5">
+        <span className="text-lg">👥</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wide text-blue-300">
+            視聴者表示
           </span>
-        </span>
+          <span className="text-base font-bold leading-none text-blue-200 tabular-nums">
+            {inflated === null ? "—" : inflated.toLocaleString()}
+            <span className="ml-0.5 text-[10px] font-normal text-blue-300">
+              人
+            </span>
+          </span>
+        </div>
       </div>
+      <div className="flex items-center gap-2 bg-neutral-600/15 px-3 py-1.5">
+        <span className="text-lg opacity-70">🔍</span>
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wide text-neutral-400">
+            実数
+          </span>
+          <span className="text-base font-bold leading-none text-neutral-200 tabular-nums">
+            {count === null ? "—" : count.toLocaleString()}
+            <span className="ml-0.5 text-[10px] font-normal text-neutral-400">
+              人
+            </span>
+          </span>
+        </div>
+      </div>
+      {ratio !== null && ratio !== 1 && (
+        <div className="flex items-center bg-amber-600/15 px-2 text-[10px] tabular-nums text-amber-300">
+          ×{ratio.toFixed(2)}
+        </div>
+      )}
     </div>
   );
 }
