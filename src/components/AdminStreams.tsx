@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  AVATARS,
+  COLORS,
+  MAX_BODY_LENGTH,
+  MAX_NICKNAME_LENGTH,
+  type Role,
+} from "@/lib/constants";
 import type { Stream, StreamStatus } from "@/lib/types";
 import {
   VIEWER_COUNT_CONFIG,
@@ -419,7 +426,184 @@ function StreamCard({
         <DescriptionEditor stream={s} onChange={onUpdate} />
         <InflationEditor stream={s} onChange={onUpdate} />
       </div>
+
+      <div className="mt-2">
+        <StreamCommentPoster stream={s} />
+      </div>
     </li>
+  );
+}
+
+type PosterForm = {
+  nickname: string;
+  avatar: string;
+  color: string;
+  role: Role;
+  body: string;
+  pinned: boolean;
+};
+
+const POSTER_INITIAL: PosterForm = {
+  nickname: "編集",
+  avatar: "owl",
+  color: COLORS[0].id,
+  role: "admin",
+  body: "",
+  pinned: false,
+};
+
+function StreamCommentPoster({ stream }: { stream: Stream }) {
+  const [form, setForm] = useState<PosterForm>(POSTER_INITIAL);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successAt, setSuccessAt] = useState<number | null>(null);
+
+  const handlePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!form.nickname.trim() || !form.body.trim()) {
+      setError("ニックネームと本文は必須です");
+      return;
+    }
+    setSubmitting(true);
+    const res = await fetch("/api/admin/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nickname: form.nickname.trim(),
+        avatar: form.avatar,
+        color: form.color,
+        role: form.role,
+        body: form.body,
+        pinned: form.pinned,
+        stream_id: stream.id,
+      }),
+    });
+    setSubmitting(false);
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setError(j.error || "投稿に失敗しました");
+      return;
+    }
+    setForm((f) => ({ ...f, body: "", pinned: false }));
+    setSuccessAt(Date.now());
+  };
+
+  const recentlySent =
+    successAt !== null && Date.now() - successAt < 3000;
+
+  return (
+    <details className="rounded-md border border-bg-border bg-bg-input/40">
+      <summary className="cursor-pointer rounded-md px-3 py-2 text-[11px] font-bold text-neutral-200 hover:bg-bg-input/60">
+        💬 この配信に運営コメントを投稿
+        {recentlySent && (
+          <span className="ml-2 rounded bg-green-600/30 px-1.5 py-0.5 text-[10px] text-green-300">
+            ✓ 投稿しました
+          </span>
+        )}
+      </summary>
+      <form onSubmit={handlePost} className="grid gap-2 border-t border-bg-border p-3 text-xs">
+        <div className="grid grid-cols-3 gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-neutral-400">ロール</span>
+            <select
+              value={form.role}
+              onChange={(e) =>
+                setForm({ ...form, role: e.target.value as Role })
+              }
+              className="rounded bg-bg-input px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="admin">運営</option>
+              <option value="staff">STAFF</option>
+              <option value="user">一般</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-neutral-400">アイコン</span>
+            <select
+              value={form.avatar}
+              onChange={(e) => setForm({ ...form, avatar: e.target.value })}
+              className="rounded bg-bg-input px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {AVATARS.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.emoji} {a.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[10px] text-neutral-400">カラー</span>
+            <select
+              value={form.color}
+              onChange={(e) => setForm({ ...form, color: e.target.value })}
+              className="rounded bg-bg-input px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {COLORS.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-neutral-400">ニックネーム</span>
+          <input
+            type="text"
+            value={form.nickname}
+            maxLength={MAX_NICKNAME_LENGTH}
+            onChange={(e) => setForm({ ...form, nickname: e.target.value })}
+            className="rounded bg-bg-input px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] text-neutral-400">本文</span>
+          <textarea
+            value={form.body}
+            maxLength={MAX_BODY_LENGTH}
+            onChange={(e) => setForm({ ...form, body: e.target.value })}
+            rows={2}
+            placeholder="運営からのコメントを入力"
+            className="rounded bg-bg-input px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </label>
+
+        {(form.role === "admin" || form.role === "staff") && (
+          <label className="flex items-center gap-2 text-[11px] text-neutral-300">
+            <input
+              type="checkbox"
+              checked={form.pinned}
+              onChange={(e) =>
+                setForm({ ...form, pinned: e.target.checked })
+              }
+              className="h-3.5 w-3.5 accent-blue-500"
+            />
+            このコメントを固定表示する(上部のお知らせ枠に出す)
+          </label>
+        )}
+
+        <div className="flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={submitting}
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {submitting ? "送信中…" : "投稿"}
+          </button>
+          {error && (
+            <span className="text-[11px] text-red-400">{error}</span>
+          )}
+        </div>
+
+        <p className="text-[10px] text-neutral-500">
+          投稿先: <span className="text-neutral-300">{stream.title}</span> /
+          stream_id: <code className="rounded bg-bg-input px-1">{stream.id.slice(0, 8)}</code>
+        </p>
+      </form>
+    </details>
   );
 }
 
