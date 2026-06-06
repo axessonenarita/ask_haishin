@@ -11,13 +11,13 @@ import {
 const STATUSES: StreamStatus[] = ["waiting", "live", "ended"];
 
 const STATUS_LABEL: Record<StreamStatus, string> = {
-  waiting: "開始前 (waiting)",
-  live: "配信中 (live)",
-  ended: "終了 (ended)",
+  waiting: "開始前",
+  live: "配信中",
+  ended: "終了",
 };
 
 const STATUS_BADGE: Record<StreamStatus, string> = {
-  waiting: "bg-neutral-600 text-neutral-100",
+  waiting: "bg-neutral-700 text-neutral-100",
   live: "bg-red-600 text-white",
   ended: "bg-neutral-800 text-neutral-400",
 };
@@ -51,18 +51,21 @@ type FormState = {
   status: StreamStatus;
 };
 
+const emptyForm = (): FormState => ({
+  title: "",
+  description: "",
+  startLocal: defaultStartLocal(),
+  hls_url: "",
+  status: "waiting",
+});
+
 export function AdminStreams() {
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState<FormState>(() => ({
-    title: "",
-    description: "",
-    startLocal: defaultStartLocal(),
-    hls_url: "",
-    status: "waiting",
-  }));
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [form, setForm] = useState<FormState>(emptyForm);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -136,13 +139,8 @@ export function AdminStreams() {
         setError(j.error || "登録に失敗しました");
         return;
       }
-      setForm({
-        title: "",
-        description: "",
-        startLocal: defaultStartLocal(),
-        hls_url: "",
-        status: "waiting",
-      });
+      setForm(emptyForm());
+      setShowCreateForm(false);
       void load();
     },
     [form, load],
@@ -179,193 +177,306 @@ export function AdminStreams() {
   );
 
   return (
-    <section className="mb-8 rounded-lg bg-bg-panel p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="font-bold">配信管理</h2>
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-md bg-bg-input px-3 py-1 text-sm hover:bg-neutral-700"
-        >
-          再読込
-        </button>
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-base font-bold">配信一覧</h2>
+          <p className="text-xs text-neutral-500">
+            登録されている配信 {streams.length} 件
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={load}
+            className="rounded-md bg-bg-input px-3 py-1.5 text-xs hover:bg-neutral-700"
+            aria-label="再読込"
+          >
+            ↻
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateForm((v) => !v)}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-bold hover:bg-blue-500"
+          >
+            {showCreateForm ? "× 閉じる" : "+ 新規配信"}
+          </button>
+        </div>
       </div>
 
-      <form
-        onSubmit={handleCreate}
-        className="mb-6 grid gap-3 rounded-md border border-bg-border p-3 md:grid-cols-2"
-      >
-        <div className="md:col-span-2 text-sm font-bold text-neutral-200">
-          新規配信を追加
+      {showCreateForm && (
+        <form
+          onSubmit={handleCreate}
+          className="grid gap-3 rounded-lg border border-bg-border bg-bg-panel p-4 md:grid-cols-2"
+        >
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-xs text-neutral-400">
+              タイトル<span className="text-red-400"> *</span>
+            </span>
+            <input
+              type="text"
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              placeholder="例：5月22日 配信"
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-xs text-neutral-400">
+              概要(任意)
+            </span>
+            <textarea
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              rows={2}
+              placeholder="本日の配信内容、テーマ、注意事項など"
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-neutral-400">
+              開始日時(端末ローカル)
+            </span>
+            <input
+              type="datetime-local"
+              value={form.startLocal}
+              onChange={(e) => setForm({ ...form, startLocal: e.target.value })}
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-neutral-400">
+              初期ステータス
+            </span>
+            <select
+              value={form.status}
+              onChange={(e) =>
+                setForm({ ...form, status: e.target.value as StreamStatus })
+              }
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-xs text-neutral-400">
+              HLS URL (m3u8)<span className="text-red-400"> *</span>
+            </span>
+            <input
+              type="url"
+              value={form.hls_url}
+              onChange={(e) => setForm({ ...form, hls_url: e.target.value })}
+              placeholder="https://vz-xxxxxxxx.b-cdn.net/<video-guid>/playlist.m3u8"
+              className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <div className="flex items-center gap-3 md:col-span-2">
+            <button
+              type="submit"
+              disabled={submitting}
+              className="rounded-md bg-blue-600 px-5 py-2 text-sm font-bold hover:bg-blue-500 disabled:opacity-50"
+            >
+              登録
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowCreateForm(false);
+                setForm(emptyForm());
+                setError(null);
+              }}
+              className="rounded-md bg-bg-input px-3 py-2 text-sm hover:bg-neutral-700"
+            >
+              キャンセル
+            </button>
+            {error && (
+              <span className="text-sm text-red-400">{error}</span>
+            )}
+          </div>
+        </form>
+      )}
+
+      {error && !showCreateForm && (
+        <div className="rounded-md border border-red-900 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+          {error}
         </div>
+      )}
 
-        <label className="text-sm md:col-span-2">
-          <span className="mb-1 block text-neutral-300">タイトル</span>
-          <input
-            type="text"
-            value={form.title}
-            onChange={(e) => setForm({ ...form, title: e.target.value })}
-            placeholder="例：5月22日 配信"
-            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
-          />
-        </label>
+      {loading ? (
+        <div className="rounded-lg border border-bg-border bg-bg-panel p-6 text-center text-sm text-neutral-400">
+          読み込み中…
+        </div>
+      ) : streams.length === 0 ? (
+        <div className="rounded-lg border border-bg-border bg-bg-panel p-6 text-center text-sm text-neutral-400">
+          配信が登録されていません
+        </div>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {streams.map((s) => (
+            <StreamCard
+              key={s.id}
+              stream={s}
+              isActive={activeStream?.id === s.id}
+              onUpdate={(patch) => updateField(s.id, patch)}
+              onDelete={() => handleDelete(s.id)}
+            />
+          ))}
+        </ul>
+      )}
 
-        <label className="text-sm md:col-span-2">
-          <span className="mb-1 block text-neutral-300">概要（任意）</span>
-          <textarea
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-            rows={3}
-            placeholder="本日の配信内容、テーマ、注意事項など"
-            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
-          />
-        </label>
+      <p className="text-[11px] text-neutral-500">
+        視聴ページ
+        <code className="mx-1 rounded bg-bg-input px-1 text-neutral-300">/</code>
+        では「終了していない配信のうち開始日時が最も近いもの」を表示します。
+      </p>
+    </div>
+  );
+}
 
-        <label className="text-sm">
-          <span className="mb-1 block text-neutral-300">開始日時（端末ローカル）</span>
-          <input
-            type="datetime-local"
-            value={form.startLocal}
-            onChange={(e) => setForm({ ...form, startLocal: e.target.value })}
-            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
-          />
-        </label>
-
-        <label className="text-sm">
-          <span className="mb-1 block text-neutral-300">初期ステータス</span>
+function StreamCard({
+  stream: s,
+  isActive,
+  onUpdate,
+  onDelete,
+}: {
+  stream: Stream;
+  isActive: boolean;
+  onUpdate: (patch: Partial<Stream>) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <li
+      className={`rounded-lg border border-bg-border bg-bg-panel p-4 ${
+        s.status === "ended" ? "opacity-70" : ""
+      }`}
+    >
+      <div className="mb-3 flex flex-wrap items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded px-2 py-0.5 text-[10px] font-bold ${STATUS_BADGE[s.status]}`}
+            >
+              {STATUS_LABEL[s.status]}
+            </span>
+            {isActive && s.status !== "ended" && (
+              <span className="rounded bg-blue-600/20 px-2 py-0.5 text-[10px] font-bold text-blue-300">
+                現在配信
+              </span>
+            )}
+            <h3 className="text-sm font-bold leading-tight">{s.title}</h3>
+          </div>
+          <div className="text-xs text-neutral-400">
+            {new Date(s.start_at).toLocaleString("ja-JP")}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           <select
-            value={form.status}
+            value={s.status}
             onChange={(e) =>
-              setForm({ ...form, status: e.target.value as StreamStatus })
+              onUpdate({ status: e.target.value as StreamStatus })
             }
-            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
+            className="rounded-md bg-bg-input px-2 py-1 text-xs"
+            aria-label="ステータス変更"
           >
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {STATUS_LABEL[s]}
+            {STATUSES.map((st) => (
+              <option key={st} value={st}>
+                {STATUS_LABEL[st]}
               </option>
             ))}
           </select>
-        </label>
-
-        <label className="text-sm md:col-span-2">
-          <span className="mb-1 block text-neutral-300">HLS URL (m3u8)</span>
-          <input
-            type="url"
-            value={form.hls_url}
-            onChange={(e) => setForm({ ...form, hls_url: e.target.value })}
-            placeholder="https://vz-xxxxxxxx-xxx.b-cdn.net/<video-guid>/playlist.m3u8"
-            className="w-full rounded-md bg-bg-input px-3 py-2 outline-none"
-          />
-        </label>
-
-        <div className="md:col-span-2">
           <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-md bg-blue-600 px-4 py-2 font-bold hover:bg-blue-500 disabled:opacity-50"
+            type="button"
+            onClick={onDelete}
+            className="rounded-md bg-red-600/20 px-2 py-1 text-xs text-red-300 hover:bg-red-600/40"
           >
-            登録
+            削除
           </button>
-          {error && (
-            <span className="ml-3 text-sm text-red-400">{error}</span>
-          )}
         </div>
-      </form>
-
-      <div className="text-sm">
-        {loading ? (
-          <div className="text-neutral-400">読み込み中…</div>
-        ) : streams.length === 0 ? (
-          <div className="text-neutral-400">配信が登録されていません</div>
-        ) : (
-          <ul className="divide-y divide-bg-border">
-            {streams.map((s) => {
-              const isActive = activeStream?.id === s.id;
-              return (
-                <li
-                  key={s.id}
-                  className={`flex flex-col gap-2 py-3 md:flex-row md:items-start md:gap-3 ${
-                    s.status === "ended" ? "opacity-60" : ""
-                  }`}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${STATUS_BADGE[s.status]}`}
-                      >
-                        {s.status}
-                      </span>
-                      {isActive && (
-                        <span className="rounded bg-blue-600/20 px-1.5 py-0.5 text-[10px] font-bold text-blue-300">
-                          視聴ページ表示中
-                        </span>
-                      )}
-                      <span className="font-bold">{s.title}</span>
-                    </div>
-                    <div className="mt-1 text-xs text-neutral-400">
-                      開始：{new Date(s.start_at).toLocaleString("ja-JP")}
-                    </div>
-                    <ViewerCount streamId={s.id} />
-                    <StreamUrl slug={s.slug} />
-                    <div className="mt-1 break-all text-[11px] text-neutral-500">
-                      {s.hls_url}
-                    </div>
-                    <InflationEditor
-                      stream={s}
-                      onChange={(patch) => updateField(s.id, patch)}
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      value={s.status}
-                      onChange={(e) =>
-                        updateField(s.id, {
-                          status: e.target.value as StreamStatus,
-                        })
-                      }
-                      className="rounded-md bg-bg-input px-2 py-1 text-xs"
-                    >
-                      {STATUSES.map((st) => (
-                        <option key={st} value={st}>
-                          {STATUS_LABEL[st]}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = window.prompt(
-                          "概要を編集",
-                          s.description ?? "",
-                        );
-                        if (next === null) return;
-                        void updateField(s.id, { description: next });
-                      }}
-                      className="rounded-md bg-bg-input px-2 py-1 text-xs hover:bg-neutral-700"
-                    >
-                      概要編集
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(s.id)}
-                      className="rounded-md bg-red-600/20 px-2 py-1 text-xs text-red-300 hover:bg-red-600/40"
-                    >
-                      削除
-                    </button>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
       </div>
 
-      <p className="mt-3 text-[11px] text-neutral-500">
-        視聴ページには「終了していない配信のうち開始日時が最も近いもの」を1件表示します。すべて終了済みの場合は最新の1件が「配信は終了しました」として表示されます。
-      </p>
-    </section>
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+        <div className="space-y-2">
+          <StreamUrl slug={s.slug} />
+          <div className="break-all text-[10px] text-neutral-500">
+            <span className="text-neutral-600">HLS:</span> {s.hls_url}
+          </div>
+        </div>
+        <ViewerCount streamId={s.id} />
+      </div>
+
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <DescriptionEditor stream={s} onChange={onUpdate} />
+        <InflationEditor stream={s} onChange={onUpdate} />
+      </div>
+    </li>
+  );
+}
+
+function DescriptionEditor({
+  stream,
+  onChange,
+}: {
+  stream: Stream;
+  onChange: (patch: Partial<Stream>) => void;
+}) {
+  const [value, setValue] = useState(stream.description ?? "");
+
+  useEffect(() => {
+    setValue(stream.description ?? "");
+  }, [stream.description]);
+
+  const dirty = value !== (stream.description ?? "");
+
+  return (
+    <details className="rounded-md border border-bg-border bg-bg-input/40 px-3 py-2">
+      <summary className="cursor-pointer text-[11px] text-neutral-300">
+        概要を編集
+        {stream.description && (
+          <span className="ml-2 text-neutral-500">
+            ({stream.description.length} 文字)
+          </span>
+        )}
+      </summary>
+      <textarea
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        rows={3}
+        placeholder="本日の配信内容、テーマ、注意事項など。URL は自動でリンク化されます。"
+        className="mt-2 w-full rounded bg-bg-input px-2 py-1.5 text-xs text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onChange({ description: value })}
+          disabled={!dirty}
+          className="rounded bg-blue-600 px-3 py-1 text-[11px] font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          保存
+        </button>
+        <button
+          type="button"
+          onClick={() => setValue(stream.description ?? "")}
+          disabled={!dirty}
+          className="rounded bg-bg-input px-3 py-1 text-[11px] text-neutral-300 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          リセット
+        </button>
+        {dirty && (
+          <span className="text-[10px] text-amber-400">未保存の変更あり</span>
+        )}
+      </div>
+    </details>
   );
 }
 
@@ -386,7 +497,8 @@ function StreamUrl({ slug }: { slug: string }) {
   };
 
   return (
-    <div className="mt-1 flex items-center gap-2 text-xs text-neutral-300">
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <span className="text-neutral-500">視聴URL</span>
       <a
         href={path}
         target="_blank"
@@ -400,7 +512,7 @@ function StreamUrl({ slug }: { slug: string }) {
         onClick={copy}
         className="shrink-0 rounded bg-bg-input px-2 py-0.5 text-[10px] hover:bg-neutral-700"
       >
-        {copied ? "コピー済" : "URLコピー"}
+        {copied ? "✓ コピー済" : "コピー"}
       </button>
     </div>
   );
@@ -410,7 +522,6 @@ function ViewerCount({ streamId }: { streamId: string }) {
   const [count, setCount] = useState<number | null>(null);
 
   useEffect(() => {
-    // 自分は track() しないので presence count には影響しない
     const channel = supabase.channel(`presence-stream-${streamId}`, {
       config: {
         presence: {
@@ -432,11 +543,19 @@ function ViewerCount({ streamId }: { streamId: string }) {
   }, [streamId]);
 
   return (
-    <div className="mt-1 flex items-center gap-1 text-xs text-neutral-300">
-      <span>👥 同時視聴</span>
-      <span className="rounded bg-blue-600/20 px-1.5 py-0.5 font-bold text-blue-300">
-        {count === null ? "—" : `${count} 人`}
-      </span>
+    <div className="flex shrink-0 items-center gap-2 rounded-md bg-blue-600/10 px-3 py-1.5">
+      <span className="text-xl">👥</span>
+      <div className="flex flex-col">
+        <span className="text-[10px] uppercase tracking-wide text-blue-300">
+          同時視聴
+        </span>
+        <span className="text-base font-bold leading-none text-blue-200 tabular-nums">
+          {count === null ? "—" : `${count}`}
+          <span className="ml-0.5 text-[10px] font-normal text-blue-300">
+            人
+          </span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -471,16 +590,9 @@ function InflationEditor({
   const previewRows = useMemo(() => {
     const points = [
       0,
-      Math.floor(config.boostStart / 2),
       config.boostStart,
       Math.round(
-        config.boostStart + (config.realMax - config.boostStart) * 0.25,
-      ),
-      Math.round(
         config.boostStart + (config.realMax - config.boostStart) * 0.5,
-      ),
-      Math.round(
-        config.boostStart + (config.realMax - config.boostStart) * 0.75,
       ),
       config.realMax,
       Math.round(config.realMax * 1.5),
@@ -502,7 +614,6 @@ function InflationEditor({
   ) => {
     const trimmed = raw.trim();
     if (trimmed === "") {
-      // 空にしたらリセット(null)
       if (stream[key] !== null) {
         onChange({ [key]: null } as InflationPatch);
       }
@@ -516,14 +627,22 @@ function InflationEditor({
     onChange({ [key]: rounded } as InflationPatch);
   };
 
+  const customized =
+    boost !== null || realMax !== null || targetMax !== null;
+
   return (
-    <details className="mt-2 rounded-md border border-bg-border bg-bg-input/40 px-2 py-1">
+    <details className="rounded-md border border-bg-border bg-bg-input/40 px-3 py-2">
       <summary className="cursor-pointer text-[11px] text-neutral-300">
-        視聴者数 表示係数を編集(空欄でデフォルトに戻る)
+        視聴者数 表示係数
+        {customized && (
+          <span className="ml-2 rounded bg-amber-600/20 px-1.5 text-[10px] text-amber-300">
+            カスタム
+          </span>
+        )}
       </summary>
       <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
         <label className="flex flex-col gap-1">
-          <span className="text-neutral-400">底開始 (boostStart)</span>
+          <span className="text-neutral-400">底開始</span>
           <input
             type="number"
             min={0}
@@ -541,7 +660,7 @@ function InflationEditor({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-neutral-400">実数 MAX (realMax)</span>
+          <span className="text-neutral-400">実数MAX</span>
           <input
             type="number"
             min={1}
@@ -559,7 +678,7 @@ function InflationEditor({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-neutral-400">表示 MAX (targetMax)</span>
+          <span className="text-neutral-400">表示MAX</span>
           <input
             type="number"
             min={1}
@@ -578,12 +697,18 @@ function InflationEditor({
         </label>
       </div>
       <div className="mt-2 overflow-x-auto">
-        <table className="text-[10px] text-neutral-300">
+        <table className="w-full text-[10px] text-neutral-300">
           <thead>
-            <tr>
-              <th className="pr-3 text-left text-neutral-500">実数</th>
-              <th className="pr-3 text-left text-neutral-500">表示</th>
-              <th className="text-left text-neutral-500">係数</th>
+            <tr className="border-b border-bg-border/60">
+              <th className="pb-1 pr-3 text-left font-normal text-neutral-500">
+                実数
+              </th>
+              <th className="pb-1 pr-3 text-left font-normal text-neutral-500">
+                表示
+              </th>
+              <th className="pb-1 text-left font-normal text-neutral-500">
+                係数
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -607,7 +732,8 @@ function InflationEditor({
         </table>
       </div>
       <p className="mt-1 text-[10px] text-neutral-500">
-        フィールドからフォーカスを外すと保存 → 視聴者画面にリアルタイム反映
+        空欄で保存するとデフォルト({VIEWER_COUNT_CONFIG.boostStart}/
+        {VIEWER_COUNT_CONFIG.realMax}/{VIEWER_COUNT_CONFIG.targetMax})
       </p>
     </details>
   );

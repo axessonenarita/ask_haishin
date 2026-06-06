@@ -136,10 +136,12 @@ export function AdminMessages() {
   );
 
   return (
-    <>
-      <section className="mb-8 rounded-lg bg-bg-panel p-4">
-        <h2 className="mb-3 font-bold">運営 / STAFF コメント投稿</h2>
-        <form onSubmit={handlePost} className="grid gap-3 md:grid-cols-2">
+    <div className="flex flex-col gap-4">
+      <details className="rounded-lg border border-bg-border bg-bg-panel">
+        <summary className="cursor-pointer rounded-lg px-4 py-3 text-sm font-bold hover:bg-bg-input/40">
+          運営 / STAFF コメントを投稿
+        </summary>
+        <form onSubmit={handlePost} className="grid gap-3 border-t border-bg-border p-4 md:grid-cols-2">
           <label className="text-sm md:col-span-2">
             <span className="mb-1 block text-neutral-300">対象配信</span>
             <select
@@ -260,17 +262,18 @@ export function AdminMessages() {
             )}
           </div>
         </form>
-      </section>
+      </details>
 
       <section className="rounded-lg bg-bg-panel p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">コメント一覧（最新200件）</h2>
+          <h2 className="text-base font-bold">コメント一覧</h2>
           <button
             type="button"
             onClick={load}
-            className="rounded-md bg-bg-input px-3 py-1 text-sm hover:bg-neutral-700"
+            className="rounded-md bg-bg-input px-3 py-1.5 text-xs hover:bg-neutral-700"
+            aria-label="再読込"
           >
-            再読込
+            ↻
           </button>
         </div>
         {loading ? (
@@ -344,6 +347,6 @@ export function AdminMessages() {
           </ul>
         )}
       </section>
-    </>
+    </div>
   );
 }
