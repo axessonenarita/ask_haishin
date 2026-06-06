@@ -17,9 +17,11 @@ export type ViewerCountConfig = typeof VIEWER_COUNT_CONFIG;
 /**
  * 実視聴者数を水増しした表示用の数値を返す。
  *
- * - actual <= boostStart: そのまま返す
- * - boostStart < actual < realMax: 係数(1.0 → targetMax/realMax)を線形に増やして掛ける
- * - actual >= realMax: targetMax を返す(上限)
+ * - actual <= boostStart: そのまま返す(係数 1.0)
+ * - boostStart < actual <= realMax: 係数を 1.0 → targetMax/realMax まで
+ *   線形補間して掛ける
+ * - actual > realMax: ピーク係数(targetMax/realMax)をそのまま掛け続け、
+ *   表示は線形に伸び続ける(上限張り付きを避けて自然な増加感を維持)
  */
 export function inflateViewerCount(
   actual: number,
@@ -28,9 +30,14 @@ export function inflateViewerCount(
   if (!Number.isFinite(actual) || actual <= 0) return 0;
   if (actual <= config.boostStart) return Math.round(actual);
   if (config.realMax <= config.boostStart) return Math.round(actual);
-  if (actual >= config.realMax) return config.targetMax;
 
   const peakMultiplier = config.targetMax / config.realMax;
+
+  if (actual >= config.realMax) {
+    // ピーク係数をそのまま掛け続けるので realMax 通過後も滑らかに伸びる
+    return Math.round(actual * peakMultiplier);
+  }
+
   const range = config.realMax - config.boostStart;
   const ratio = (actual - config.boostStart) / range;
   const multiplier = 1 + ratio * (peakMultiplier - 1);
