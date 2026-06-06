@@ -21,6 +21,7 @@ export function LivePage({ stream: initialStream }: Props) {
     height: number;
     offsetTop: number;
   } | null>(null);
+  const [viewerCount, setViewerCount] = useState<number | null>(null);
 
   useEffect(() => {
     setStream(initialStream);
@@ -84,11 +85,14 @@ export function LivePage({ stream: initialStream }: Props) {
     };
   }, [stream?.id]);
 
-  // 視聴者カウント用: Realtime Presence チャネルに自分を track する
-  // 管理画面側で同じチャネルを購読して count を表示する
+  // 視聴者カウント用: Realtime Presence チャネルに自分を track + 同チャネルから
+  // 全体の count を購読する。管理画面側でも同じチャネルを購読して count を表示する。
   useEffect(() => {
     const id = stream?.id;
-    if (!id) return;
+    if (!id) {
+      setViewerCount(null);
+      return;
+    }
 
     const presenceKey =
       typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -99,6 +103,11 @@ export function LivePage({ stream: initialStream }: Props) {
       config: { presence: { key: presenceKey } },
     });
 
+    channel.on("presence", { event: "sync" }, () => {
+      const state = channel.presenceState();
+      setViewerCount(Object.keys(state).length);
+    });
+
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
         await channel.track({ at: new Date().toISOString() });
@@ -106,6 +115,7 @@ export function LivePage({ stream: initialStream }: Props) {
     });
 
     return () => {
+      setViewerCount(null);
       void channel.untrack();
       supabase.removeChannel(channel);
     };
@@ -175,6 +185,7 @@ export function LivePage({ stream: initialStream }: Props) {
             onProfileChange={save}
             chatExpanded={chatExpanded}
             onToggleExpand={toggleChatExpanded}
+            viewerCount={viewerCount}
           />
         ) : (
           <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">

@@ -18,6 +18,7 @@ import {
 } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
 import { containsBannedWord, sanitizeBody } from "@/lib/validation";
+import { inflateViewerCount } from "@/lib/viewerCount";
 import type { Message, Stream, UserProfile } from "@/lib/types";
 import { MessageItem } from "./MessageItem";
 import { ProfileSetup } from "./ProfileSetup";
@@ -33,6 +34,7 @@ type Props = {
   onProfileChange: (p: UserProfile) => void;
   chatExpanded?: boolean;
   onToggleExpand?: () => void;
+  viewerCount?: number | null;
 };
 
 export function Chat({
@@ -43,6 +45,7 @@ export function Chat({
   onProfileChange,
   chatExpanded,
   onToggleExpand,
+  viewerCount,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState("");
@@ -363,8 +366,15 @@ export function Chat({
       {/* 通常チャット(常時レンダリング、オーバーレイ時は背後でブラーされる) */}
       <div className="flex h-full flex-col bg-bg-panel">
         <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel px-3 py-2">
-          <div className="text-sm font-bold text-neutral-200">
-            ライブチャット
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="text-sm font-bold text-neutral-200">
+              ライブチャット
+            </div>
+            {viewerCount !== null && viewerCount !== undefined && viewerCount > 0 && (
+              <span className="shrink-0 text-[11px] text-neutral-400">
+                👥 {inflateViewerCount(viewerCount).toLocaleString()} 人視聴中
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {onToggleExpand && (
