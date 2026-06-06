@@ -68,6 +68,26 @@ export async function PATCH(
     }
     update.status = p.status;
   }
+  for (const key of [
+    "inflation_boost_start",
+    "inflation_real_max",
+    "inflation_target_max",
+  ] as const) {
+    if (p[key] === undefined) continue;
+    const raw = p[key];
+    if (raw === null || raw === "") {
+      update[key] = null;
+      continue;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || Math.floor(n) !== n) {
+      return NextResponse.json(
+        { error: `invalid ${key}` },
+        { status: 400 },
+      );
+    }
+    update[key] = n;
+  }
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "no fields to update" }, { status: 400 });

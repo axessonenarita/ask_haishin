@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Stream, StreamStatus } from "@/lib/types";
+import {
+  VIEWER_COUNT_CONFIG,
+  inflateViewerCount,
+} from "@/lib/viewerCount";
 
 const STATUSES: StreamStatus[] = ["waiting", "live", "ended"];
 
@@ -307,6 +311,10 @@ export function AdminStreams() {
                     <div className="mt-1 break-all text-[11px] text-neutral-500">
                       {s.hls_url}
                     </div>
+                    <InflationEditor
+                      stream={s}
+                      onChange={(patch) => updateField(s.id, patch)}
+                    />
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
@@ -430,5 +438,177 @@ function ViewerCount({ streamId }: { streamId: string }) {
         {count === null ? "—" : `${count} 人`}
       </span>
     </div>
+  );
+}
+
+type InflationPatch = Partial<
+  Pick<
+    Stream,
+    "inflation_boost_start" | "inflation_real_max" | "inflation_target_max"
+  >
+>;
+
+function InflationEditor({
+  stream,
+  onChange,
+}: {
+  stream: Stream;
+  onChange: (patch: InflationPatch) => void;
+}) {
+  const boost = stream.inflation_boost_start;
+  const realMax = stream.inflation_real_max;
+  const targetMax = stream.inflation_target_max;
+
+  const config = useMemo(
+    () => ({
+      boostStart: boost ?? VIEWER_COUNT_CONFIG.boostStart,
+      realMax: realMax ?? VIEWER_COUNT_CONFIG.realMax,
+      targetMax: targetMax ?? VIEWER_COUNT_CONFIG.targetMax,
+    }),
+    [boost, realMax, targetMax],
+  );
+
+  const previewRows = useMemo(() => {
+    const points = [
+      0,
+      Math.floor(config.boostStart / 2),
+      config.boostStart,
+      Math.round(
+        config.boostStart + (config.realMax - config.boostStart) * 0.25,
+      ),
+      Math.round(
+        config.boostStart + (config.realMax - config.boostStart) * 0.5,
+      ),
+      Math.round(
+        config.boostStart + (config.realMax - config.boostStart) * 0.75,
+      ),
+      config.realMax,
+      Math.round(config.realMax * 1.5),
+      Math.round(config.realMax * 2),
+    ];
+    return Array.from(new Set(points))
+      .filter((n) => n >= 0)
+      .sort((a, b) => a - b)
+      .map((actual) => ({
+        actual,
+        displayed: inflateViewerCount(actual, config),
+      }));
+  }, [config]);
+
+  const handleBlur = (
+    key: keyof InflationPatch,
+    raw: string,
+    fallback: number,
+  ) => {
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      // 空にしたらリセット(null)
+      if (stream[key] !== null) {
+        onChange({ [key]: null } as InflationPatch);
+      }
+      return;
+    }
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) return;
+    const rounded = Math.floor(n);
+    if (stream[key] === rounded) return;
+    if (rounded === fallback && stream[key] === null) return;
+    onChange({ [key]: rounded } as InflationPatch);
+  };
+
+  return (
+    <details className="mt-2 rounded-md border border-bg-border bg-bg-input/40 px-2 py-1">
+      <summary className="cursor-pointer text-[11px] text-neutral-300">
+        視聴者数 表示係数を編集(空欄でデフォルトに戻る)
+      </summary>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+        <label className="flex flex-col gap-1">
+          <span className="text-neutral-400">底開始 (boostStart)</span>
+          <input
+            type="number"
+            min={0}
+            defaultValue={boost ?? ""}
+            placeholder={String(VIEWER_COUNT_CONFIG.boostStart)}
+            onBlur={(e) =>
+              handleBlur(
+                "inflation_boost_start",
+                e.target.value,
+                VIEWER_COUNT_CONFIG.boostStart,
+              )
+            }
+            className="rounded bg-bg-input px-2 py-1 text-xs text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500"
+            key={`bs-${stream.id}-${boost ?? "default"}`}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-neutral-400">実数 MAX (realMax)</span>
+          <input
+            type="number"
+            min={1}
+            defaultValue={realMax ?? ""}
+            placeholder={String(VIEWER_COUNT_CONFIG.realMax)}
+            onBlur={(e) =>
+              handleBlur(
+                "inflation_real_max",
+                e.target.value,
+                VIEWER_COUNT_CONFIG.realMax,
+              )
+            }
+            className="rounded bg-bg-input px-2 py-1 text-xs text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500"
+            key={`rm-${stream.id}-${realMax ?? "default"}`}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-neutral-400">表示 MAX (targetMax)</span>
+          <input
+            type="number"
+            min={1}
+            defaultValue={targetMax ?? ""}
+            placeholder={String(VIEWER_COUNT_CONFIG.targetMax)}
+            onBlur={(e) =>
+              handleBlur(
+                "inflation_target_max",
+                e.target.value,
+                VIEWER_COUNT_CONFIG.targetMax,
+              )
+            }
+            className="rounded bg-bg-input px-2 py-1 text-xs text-neutral-100 outline-none focus:ring-2 focus:ring-blue-500"
+            key={`tm-${stream.id}-${targetMax ?? "default"}`}
+          />
+        </label>
+      </div>
+      <div className="mt-2 overflow-x-auto">
+        <table className="text-[10px] text-neutral-300">
+          <thead>
+            <tr>
+              <th className="pr-3 text-left text-neutral-500">実数</th>
+              <th className="pr-3 text-left text-neutral-500">表示</th>
+              <th className="text-left text-neutral-500">係数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {previewRows.map((r) => {
+              const ratio = r.actual === 0 ? 1 : r.displayed / r.actual;
+              return (
+                <tr key={r.actual}>
+                  <td className="pr-3 tabular-nums">
+                    {r.actual.toLocaleString()}
+                  </td>
+                  <td className="pr-3 tabular-nums text-neutral-100">
+                    {r.displayed.toLocaleString()}
+                  </td>
+                  <td className="tabular-nums text-neutral-400">
+                    ×{ratio.toFixed(2)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-1 text-[10px] text-neutral-500">
+        フィールドからフォーカスを外すと保存 → 視聴者画面にリアルタイム反映
+      </p>
+    </details>
   );
 }
