@@ -29,4 +29,7 @@ export type Stream = {
   start_at: string;
   hls_url: string;
   status: StreamStatus;
+  inflation_boost_start: number | null;
+  inflation_real_max: number | null;
+  inflation_target_max: number | null;
 };

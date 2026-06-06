@@ -18,7 +18,10 @@ import {
 } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
 import { containsBannedWord, sanitizeBody } from "@/lib/validation";
-import { inflateViewerCount } from "@/lib/viewerCount";
+import {
+  VIEWER_COUNT_CONFIG,
+  inflateViewerCount,
+} from "@/lib/viewerCount";
 import type { Message, Stream, UserProfile } from "@/lib/types";
 import { MessageItem } from "./MessageItem";
 import { ProfileSetup } from "./ProfileSetup";
@@ -83,6 +86,22 @@ export function Chat({
       vv.removeEventListener("scroll", update);
     };
   }, []);
+
+  // 視聴者数のかさ増し係数: stream の設定があればそれを優先、無ければデフォルト
+  const inflationConfig = useMemo(
+    () => ({
+      boostStart:
+        stream?.inflation_boost_start ?? VIEWER_COUNT_CONFIG.boostStart,
+      realMax: stream?.inflation_real_max ?? VIEWER_COUNT_CONFIG.realMax,
+      targetMax:
+        stream?.inflation_target_max ?? VIEWER_COUNT_CONFIG.targetMax,
+    }),
+    [
+      stream?.inflation_boost_start,
+      stream?.inflation_real_max,
+      stream?.inflation_target_max,
+    ],
+  );
 
   // pinned された admin/staff コメントだけを上部のお知らせバナーに出す
   const latestAdminMessage = useMemo(() => {
@@ -372,7 +391,9 @@ export function Chat({
             </div>
             {viewerCount !== null && viewerCount !== undefined && viewerCount > 0 && (
               <span className="shrink-0 text-[11px] text-neutral-400">
-                👥 {inflateViewerCount(viewerCount).toLocaleString()} 人視聴中
+                👥{" "}
+                {inflateViewerCount(viewerCount, inflationConfig).toLocaleString()}{" "}
+                人視聴中
               </span>
             )}
           </div>
