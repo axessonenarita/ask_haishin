@@ -809,6 +809,7 @@ function InflationEditor({
   const previewRows = useMemo(() => {
     const points = [
       0,
+      Math.floor(config.boostStart / 2),
       config.boostStart,
       Math.round(
         config.boostStart + (config.realMax - config.boostStart) * 0.5,
@@ -825,6 +826,30 @@ function InflationEditor({
         displayed: inflateViewerCount(actual, config),
       }));
   }, [config]);
+
+  const maxActual = previewRows[previewRows.length - 1]?.actual ?? 1;
+  const maxDisplayed = previewRows[previewRows.length - 1]?.displayed ?? 1;
+
+  // SVG カーブ用のポイント
+  const curvePath = useMemo(() => {
+    const W = 100;
+    const H = 36;
+    if (maxActual === 0) return "";
+    const steps = 60;
+    const parts: string[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const actual = (i / steps) * maxActual;
+      const displayed = inflateViewerCount(actual, config);
+      const x = (i / steps) * W;
+      const y = H - (displayed / Math.max(maxDisplayed, 1)) * H;
+      parts.push(`${i === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`);
+    }
+    return parts.join(" ");
+  }, [config, maxActual, maxDisplayed]);
+
+  const boostMarker = maxActual === 0 ? 0 : (config.boostStart / maxActual) * 100;
+  const realMaxMarker =
+    maxActual === 0 ? 0 : (config.realMax / maxActual) * 100;
 
   const handleBlur = (
     key: keyof InflationPatch,
@@ -915,44 +940,169 @@ function InflationEditor({
           />
         </label>
       </div>
-      <div className="mt-2 overflow-x-auto">
-        <table className="w-full text-[10px] text-neutral-300">
-          <thead>
-            <tr className="border-b border-bg-border/60">
-              <th className="pb-1 pr-3 text-left font-normal text-neutral-500">
-                実数
-              </th>
-              <th className="pb-1 pr-3 text-left font-normal text-neutral-500">
-                表示
-              </th>
-              <th className="pb-1 text-left font-normal text-neutral-500">
-                係数
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {previewRows.map((r) => {
-              const ratio = r.actual === 0 ? 1 : r.displayed / r.actual;
-              return (
-                <tr key={r.actual}>
-                  <td className="pr-3 tabular-nums">
-                    {r.actual.toLocaleString()}
-                  </td>
-                  <td className="pr-3 tabular-nums text-neutral-100">
-                    {r.displayed.toLocaleString()}
-                  </td>
-                  <td className="tabular-nums text-neutral-400">
-                    ×{ratio.toFixed(2)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      {/* カーブのプレビュー */}
+      <div className="mt-3 rounded-md bg-bg-base/60 p-2">
+        <svg
+          viewBox="0 0 100 36"
+          preserveAspectRatio="none"
+          className="block h-14 w-full"
+        >
+          {/* ゾーン背景 */}
+          <rect
+            x={0}
+            y={0}
+            width={boostMarker}
+            height={36}
+            fill="rgb(115 115 115 / 0.15)"
+          />
+          <rect
+            x={boostMarker}
+            y={0}
+            width={Math.max(0, realMaxMarker - boostMarker)}
+            height={36}
+            fill="rgb(59 130 246 / 0.15)"
+          />
+          <rect
+            x={realMaxMarker}
+            y={0}
+            width={Math.max(0, 100 - realMaxMarker)}
+            height={36}
+            fill="rgb(245 158 11 / 0.15)"
+          />
+          {/* 補助グリッド線(50% 線) */}
+          <line
+            x1={0}
+            y1={18}
+            x2={100}
+            y2={18}
+            stroke="rgb(255 255 255 / 0.05)"
+            strokeWidth={0.3}
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* ゾーン境界の縦点線 */}
+          <line
+            x1={boostMarker}
+            y1={0}
+            x2={boostMarker}
+            y2={36}
+            stroke="rgb(163 163 163 / 0.5)"
+            strokeWidth={0.5}
+            strokeDasharray="2,2"
+            vectorEffect="non-scaling-stroke"
+          />
+          <line
+            x1={realMaxMarker}
+            y1={0}
+            x2={realMaxMarker}
+            y2={36}
+            stroke="rgb(163 163 163 / 0.5)"
+            strokeWidth={0.5}
+            strokeDasharray="2,2"
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* y = x の参照線(無加工ライン) */}
+          <line
+            x1={0}
+            y1={36}
+            x2={100}
+            y2={
+              36 -
+              (Math.min(maxActual, maxDisplayed) /
+                Math.max(maxDisplayed, 1)) *
+                36
+            }
+            stroke="rgb(115 115 115 / 0.5)"
+            strokeWidth={0.5}
+            strokeDasharray="1,2"
+            vectorEffect="non-scaling-stroke"
+          />
+          {/* かさ増しカーブ */}
+          <path
+            d={curvePath}
+            fill="none"
+            stroke="rgb(96 165 250)"
+            strokeWidth={1.5}
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[10px] text-neutral-500">
+          <span>
+            横軸: 実数 (0 →{" "}
+            <span className="tabular-nums">
+              {maxActual.toLocaleString()}
+            </span>
+            )
+          </span>
+          <span className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-neutral-500/40" />
+              実数表示
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-blue-500/40" />
+              かさ増し
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm bg-amber-500/40" />
+              ピーク継続
+            </span>
+          </span>
+        </div>
       </div>
-      <p className="mt-1 text-[10px] text-neutral-500">
-        空欄で保存するとデフォルト({VIEWER_COUNT_CONFIG.boostStart}/
-        {VIEWER_COUNT_CONFIG.realMax}/{VIEWER_COUNT_CONFIG.targetMax})
+
+      {/* 詳細プレビュー表 */}
+      <div className="mt-2 space-y-1">
+        <div className="grid grid-cols-[3.5rem_3.5rem_3rem_1fr] gap-2 border-b border-bg-border/40 pb-1 text-[10px] text-neutral-500">
+          <div>実数</div>
+          <div>表示</div>
+          <div>係数</div>
+          <div></div>
+        </div>
+        {previewRows.map((r) => {
+          const ratio = r.actual === 0 ? 1 : r.displayed / r.actual;
+          const barPct =
+            maxDisplayed === 0 ? 0 : (r.displayed / maxDisplayed) * 100;
+          const zone =
+            r.actual <= config.boostStart
+              ? "low"
+              : r.actual <= config.realMax
+                ? "mid"
+                : "high";
+          const barClass =
+            zone === "low"
+              ? "bg-neutral-500/50"
+              : zone === "mid"
+                ? "bg-blue-500/60"
+                : "bg-amber-500/60";
+          return (
+            <div
+              key={r.actual}
+              className="grid grid-cols-[3.5rem_3.5rem_3rem_1fr] items-center gap-2 text-[11px]"
+            >
+              <div className="tabular-nums text-neutral-400">
+                {r.actual.toLocaleString()}
+              </div>
+              <div className="tabular-nums font-bold text-neutral-100">
+                {r.displayed.toLocaleString()}
+              </div>
+              <div className="tabular-nums text-neutral-500">
+                ×{ratio.toFixed(2)}
+              </div>
+              <div className="h-2 overflow-hidden rounded bg-bg-base/60">
+                <div
+                  className={`h-full rounded ${barClass}`}
+                  style={{ width: `${barPct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="mt-2 text-[10px] text-neutral-500">
+        空欄保存でデフォルト({VIEWER_COUNT_CONFIG.boostStart}/
+        {VIEWER_COUNT_CONFIG.realMax}/{VIEWER_COUNT_CONFIG.targetMax})に戻る。
+        編集はリアルタイムで視聴者画面に反映。
       </p>
     </details>
   );
