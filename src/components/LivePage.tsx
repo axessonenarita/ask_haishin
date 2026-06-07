@@ -87,6 +87,9 @@ export function LivePage({ stream: initialStream }: Props) {
 
   // 視聴者カウント用: Realtime Presence チャネルに自分を track + 同チャネルから
   // 全体の count を購読する。管理画面側でも同じチャネルを購読して count を表示する。
+  // 視聴者側の表示更新は 1 分おきに間引いて Realtime メッセージ量を抑える
+  // (Presence の sync は人の出入りごとに 500 人分発火するので 1 分に
+  // 1 回まで圧縮)
   useEffect(() => {
     const id = stream?.id;
     if (!id) {
@@ -103,10 +106,22 @@ export function LivePage({ stream: initialStream }: Props) {
       config: { presence: { key: presenceKey } },
     });
 
+    let latestCount = 0;
+    let displayedOnce = false;
+
     channel.on("presence", { event: "sync" }, () => {
       const state = channel.presenceState();
-      setViewerCount(Object.keys(state).length);
+      latestCount = Object.keys(state).length;
+      // 初回 sync だけ即座に反映(ページ開いて 1 分待たないと出ない問題を回避)
+      if (!displayedOnce) {
+        displayedOnce = true;
+        setViewerCount(latestCount);
+      }
     });
+
+    const interval = window.setInterval(() => {
+      setViewerCount(latestCount);
+    }, 60_000);
 
     channel.subscribe(async (status) => {
       if (status === "SUBSCRIBED") {
@@ -115,6 +130,7 @@ export function LivePage({ stream: initialStream }: Props) {
     });
 
     return () => {
+      window.clearInterval(interval);
       setViewerCount(null);
       void channel.untrack();
       supabase.removeChannel(channel);
