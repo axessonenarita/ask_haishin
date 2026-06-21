@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AVATARS,
   COLORS,
@@ -37,21 +37,34 @@ export function AdminMessages() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [streams, setStreams] = useState<Stream[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [form, setForm] = useState<FormState>(initialForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 初回ロードのときだけ loading=true で「読み込み中…」を出す。
+  // 以降の自動更新では <ul> をアンマウントせず、スクロール位置を保つ
+  const isFirstLoadRef = useRef(true);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    const isFirst = isFirstLoadRef.current;
+    if (!isFirst) setRefreshing(true);
     const res = await fetch("/api/admin/messages", { cache: "no-store" });
     if (!res.ok) {
       setError("読み込みに失敗しました");
-      setLoading(false);
+      if (isFirst) {
+        setLoading(false);
+        isFirstLoadRef.current = false;
+      }
+      setRefreshing(false);
       return;
     }
     const json = (await res.json()) as { messages: Message[] };
     setMessages(json.messages);
-    setLoading(false);
+    if (isFirst) {
+      setLoading(false);
+      isFirstLoadRef.current = false;
+    }
+    setRefreshing(false);
   }, []);
 
   const loadStreams = useCallback(async () => {
@@ -266,14 +279,22 @@ export function AdminMessages() {
 
       <section className="rounded-lg bg-bg-panel p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-base font-bold">コメント一覧</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold">コメント一覧</h2>
+            {refreshing && (
+              <span className="text-[10px] text-neutral-500">更新中…</span>
+            )}
+          </div>
           <button
             type="button"
             onClick={load}
-            className="rounded-md bg-bg-input px-3 py-1.5 text-xs hover:bg-neutral-700"
+            disabled={refreshing}
+            className="rounded-md bg-bg-input px-3 py-1.5 text-xs hover:bg-neutral-700 disabled:opacity-50"
             aria-label="再読込"
           >
-            ↻
+            <span className={refreshing ? "inline-block animate-spin" : ""}>
+              ↻
+            </span>
           </button>
         </div>
         {loading ? (
