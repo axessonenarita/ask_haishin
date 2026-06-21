@@ -10,6 +10,7 @@ import {
   type CSSProperties,
 } from "react";
 import { trackEvent } from "@/lib/analytics";
+import { supabase } from "@/lib/supabase/client";
 import type { Stream } from "@/lib/types";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
 
@@ -83,6 +84,9 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [forkEffects, setForkEffects] = useState<
+    { id: string; x: number }[]
+  >([]);
   const recoveryAttemptsRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
   const exhaustedRef = useRef(false);
@@ -131,6 +135,34 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       window.removeEventListener("orientationchange", update);
     };
   }, []);
+
+  // 音叉ボタンの broadcast を受信して視覚エフェクトを浮かべる。
+  // 自分の押下分も Supabase の self broadcast で帰ってくるので、
+  // ここでまとめてアニメーション化する
+  useEffect(() => {
+    const id = stream?.id;
+    if (!id) return;
+    let lastAt = 0;
+    const channel = supabase.channel(`fork-effects-${id}`, {
+      config: { broadcast: { self: true } },
+    });
+    channel.on("broadcast", { event: "fork_pressed" }, () => {
+      // 連打 / 同時多発の濁流を防ぐためのスロットリング(100ms 間隔以下は捨てる)
+      const t = Date.now();
+      if (t - lastAt < 100) return;
+      lastAt = t;
+      const id2 = `${t}-${Math.random().toString(36).slice(2, 8)}`;
+      const x = Math.random() * 80 + 10; // 10% - 90%
+      setForkEffects((es) => [...es, { id: id2, x }]);
+      window.setTimeout(() => {
+        setForkEffects((es) => es.filter((e) => e.id !== id2));
+      }, 2600);
+    });
+    channel.subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [stream?.id]);
 
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
@@ -798,6 +830,21 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         controlsList="nodownload noremoteplayback nofullscreen"
         className="absolute inset-0 h-full w-full"
       />
+
+      {forkEffects.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden">
+          {forkEffects.map((e) => (
+            <span
+              key={e.id}
+              className="absolute bottom-0 select-none animate-floatUp text-3xl drop-shadow"
+              style={{ left: `${e.x}%` }}
+              aria-hidden
+            >
+              🔔
+            </span>
+          ))}
+        </div>
+      )}
 
       {phase === "preRoll" && stream && (
         <div className="pointer-events-none absolute right-3 top-3 z-10 rounded bg-black/70 px-2 py-1 text-right text-white">
