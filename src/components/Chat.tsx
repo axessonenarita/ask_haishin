@@ -35,8 +35,6 @@ type Props = {
   stream?: Stream | null;
   playbackEnded?: boolean;
   onProfileChange: (p: UserProfile) => void;
-  chatExpanded?: boolean;
-  onToggleExpand?: () => void;
   viewerCount?: number | null;
 };
 
@@ -46,8 +44,6 @@ export function Chat({
   stream,
   playbackEnded,
   onProfileChange,
-  chatExpanded,
-  onToggleExpand,
   viewerCount,
 }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -417,16 +413,6 @@ export function Chat({
             >
               {chatHidden ? "コメント表示" : "コメント非表示"}
             </button>
-            {onToggleExpand && !chatHidden && (
-              <button
-                type="button"
-                onClick={onToggleExpand}
-                className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700 md:hidden"
-                aria-label={chatExpanded ? "チャットを縮小" : "チャットを拡大"}
-              >
-                {chatExpanded ? "縮小" : "拡大"}
-              </button>
-            )}
             <button
               type="button"
               onClick={() => setShowSettings(true)}
