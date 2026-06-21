@@ -58,6 +58,7 @@ export function Chat({
   const [unreadCount, setUnreadCount] = useState(0);
   const [dismissedAdminId, setDismissedAdminId] = useState<string | null>(null);
   const [inputFocused, setInputFocused] = useState(false);
+  const [chatHidden, setChatHidden] = useState(false);
   const [exitState, setExitState] = useState<
     "idle" | "confirming" | "fallback"
   >("idle");
@@ -384,21 +385,39 @@ export function Chat({
     <>
       {/* 通常チャット(常時レンダリング、オーバーレイ時は背後でブラーされる) */}
       <div className="flex h-full flex-col bg-bg-panel">
-        <div className="flex shrink-0 items-center justify-between border-b border-bg-border bg-bg-panel px-3 py-2">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-bg-border bg-bg-panel px-3 py-2">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="text-sm font-bold text-neutral-200">
-              ライブチャット
-            </div>
-            {viewerCount !== null && viewerCount !== undefined && viewerCount > 0 && (
-              <span className="shrink-0 text-[11px] text-neutral-400">
-                👥{" "}
-                {inflateViewerCount(viewerCount, inflationConfig).toLocaleString()}{" "}
-                人視聴中
-              </span>
-            )}
+            {viewerCount !== null &&
+              viewerCount !== undefined &&
+              viewerCount > 0 && (
+                <span className="shrink-0 text-[11px] text-neutral-300">
+                  👥{" "}
+                  <span className="tabular-nums font-bold">
+                    {inflateViewerCount(
+                      viewerCount,
+                      inflationConfig,
+                    ).toLocaleString()}
+                  </span>{" "}
+                  人視聴中
+                </span>
+              )}
           </div>
-          <div className="flex items-center gap-2">
-            {onToggleExpand && (
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setChatHidden((v) => !v)}
+              className={`rounded-md px-2 py-1 text-xs hover:bg-neutral-700 ${
+                chatHidden
+                  ? "bg-blue-600/30 text-blue-200"
+                  : "bg-bg-input text-neutral-300"
+              }`}
+              aria-label={
+                chatHidden ? "コメントを表示" : "コメントを非表示"
+              }
+            >
+              {chatHidden ? "コメント表示" : "コメント非表示"}
+            </button>
+            {onToggleExpand && !chatHidden && (
               <button
                 type="button"
                 onClick={onToggleExpand}
@@ -413,7 +432,7 @@ export function Chat({
               onClick={() => setShowSettings(true)}
               className="rounded-md bg-bg-input px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-700"
             >
-              設定変更
+              設定
             </button>
             <button
               type="button"
@@ -430,82 +449,92 @@ export function Chat({
           </div>
         </div>
 
-        <div className="shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
-          <button
-            type="button"
-            onClick={() => inputRef.current?.focus()}
-            disabled={inputFocused}
-            aria-hidden={inputFocused}
-            tabIndex={inputFocused ? -1 : 0}
-            className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-bg-input"
-          >
-            配信にコメントを送ろう!
-          </button>
-        </div>
-
-        {error && !inputFocused && (
-          <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
-            {error}
+        {chatHidden ? (
+          <div className="flex flex-1 items-center justify-center bg-bg-panel/40 p-4 text-center text-xs text-neutral-500">
+            コメントは非表示です。
+            <br className="md:hidden" />
+            上の「コメント表示」で再表示できます。
           </div>
-        )}
-
-        {showAdminBanner && latestAdminMessage && (
-          <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
-            <div className="min-w-0 flex-1 break-words text-sm">
-              <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
-                運営からのお知らせ
-              </div>
-              <div>
-                <span className="mr-1">{latestAdminMessage.nickname}</span>
-                <span className="text-neutral-400">：</span>
-                <span className="text-neutral-100">
-                  {latestAdminMessage.body}
-                </span>
-              </div>
+        ) : (
+          <>
+            <div className="shrink-0 border-b border-bg-border bg-bg-panel px-3 py-2">
+              <button
+                type="button"
+                onClick={() => inputRef.current?.focus()}
+                disabled={inputFocused}
+                aria-hidden={inputFocused}
+                tabIndex={inputFocused ? -1 : 0}
+                className="w-full rounded-full bg-bg-input px-4 py-2 text-left text-sm text-neutral-400 hover:bg-neutral-700 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-bg-input"
+              >
+                配信にコメントを送ろう!
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setDismissedAdminId(latestAdminMessage.id)}
-              className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
-              aria-label="お知らせを閉じる"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
-        <div className="relative flex-1 min-h-0">
-          <div
-            ref={listRef}
-            onScroll={handleScroll}
-            className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
-          >
-            {stream && (
-              <div className="border-b border-bg-border md:hidden">
-                <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+            {error && !inputFocused && (
+              <div className="shrink-0 border-b border-red-900 bg-red-950/40 px-3 py-1.5 text-xs text-red-300">
+                {error}
               </div>
             )}
-            <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
-              ニックネームで参加できます。ログインは不要です。
-              <br />
-              荒らし・なりすまし・不適切投稿は運営判断で削除します。
-            </div>
-            {messages.map((m) => (
-              <MessageItem key={m.id} message={m} />
-            ))}
-            <div ref={bottomSentinelRef} aria-hidden className="h-1" />
-          </div>
 
-          {unreadCount > 0 && !inputFocused && (
-            <button
-              type="button"
-              onClick={jumpToBottom}
-              className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
-            >
-              ↓ 新着 {unreadCount}件
-            </button>
-          )}
-        </div>
+            {showAdminBanner && latestAdminMessage && (
+              <div className="flex shrink-0 items-start gap-2 border-b border-role-adminGold/40 bg-role-adminGold/10 px-3 py-2">
+                <div className="min-w-0 flex-1 break-words text-sm">
+                  <div className="mb-0.5 text-[10px] font-bold text-role-adminGold">
+                    運営からのお知らせ
+                  </div>
+                  <div>
+                    <span className="mr-1">{latestAdminMessage.nickname}</span>
+                    <span className="text-neutral-400">：</span>
+                    <span className="text-neutral-100">
+                      {latestAdminMessage.body}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDismissedAdminId(latestAdminMessage.id)}
+                  className="shrink-0 rounded p-1 text-neutral-300 hover:bg-white/10"
+                  aria-label="お知らせを閉じる"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="relative flex-1 min-h-0">
+              <div
+                ref={listRef}
+                onScroll={handleScroll}
+                className="chat-scroll absolute inset-0 overflow-y-auto pt-2 pb-4"
+              >
+                {stream && (
+                  <div className="border-b border-bg-border md:hidden">
+                    <StreamInfo stream={stream} playbackEnded={playbackEnded} />
+                  </div>
+                )}
+                <div className="px-3 pt-2 pb-2 text-[11px] leading-snug text-neutral-400">
+                  ニックネームで参加できます。ログインは不要です。
+                  <br />
+                  荒らし・なりすまし・不適切投稿は運営判断で削除します。
+                </div>
+                {messages.map((m) => (
+                  <MessageItem key={m.id} message={m} />
+                ))}
+                <div ref={bottomSentinelRef} aria-hidden className="h-1" />
+              </div>
+
+              {unreadCount > 0 && !inputFocused && (
+                <button
+                  type="button"
+                  onClick={jumpToBottom}
+                  className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-blue-600 px-4 py-1.5 text-xs font-bold text-white shadow-lg hover:bg-blue-500"
+                >
+                  ↓ 新着 {unreadCount}件
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* キーボード直上に貼り付く入力欄(透明オーバーレイの底だけが見える) */}
