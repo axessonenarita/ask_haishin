@@ -1,7 +1,14 @@
 "use client";
 
 import * as Sentry from "@sentry/nextjs";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { trackEvent } from "@/lib/analytics";
 import type { Stream } from "@/lib/types";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
@@ -75,6 +82,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [needsUnmute, setNeedsUnmute] = useState(false);
   const [playbackKey, setPlaybackKey] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
   const recoveryAttemptsRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
   const exhaustedRef = useRef(false);
@@ -108,6 +116,21 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       window.removeEventListener("keydown", onKey);
     };
   }, [isFullscreen]);
+
+  // 縦持ち判定: フルスクリーン時に縦持ちなら 90 度回転して横向き再生する
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
 
   const toggleMute = useCallback(() => {
     const v = videoRef.current;
@@ -748,14 +771,25 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     );
   }
 
+  const rotated = isFullscreen && isPortrait;
+  const wrapperClassName = rotated
+    ? "fixed z-50 bg-black"
+    : isFullscreen
+      ? "fixed inset-0 z-50 h-[100dvh] w-full bg-black"
+      : "relative aspect-video w-full bg-black";
+  const wrapperStyle: CSSProperties | undefined = rotated
+    ? {
+        top: "50%",
+        left: "50%",
+        width: "100vh",
+        height: "100vw",
+        transform: "translate(-50%, -50%) rotate(90deg)",
+        transformOrigin: "center center",
+      }
+    : undefined;
+
   return (
-    <div
-      className={`w-full bg-black ${
-        isFullscreen
-          ? "fixed inset-0 z-50 h-[100dvh]"
-          : "relative aspect-video"
-      }`}
-    >
+    <div className={wrapperClassName} style={wrapperStyle}>
       <video
         ref={videoRef}
         playsInline
