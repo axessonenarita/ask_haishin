@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FORK_COOLDOWN_MS, LS_KEYS } from "@/lib/constants";
 import { supabase } from "@/lib/supabase/client";
+import type { UserProfile } from "@/lib/types";
+import { DonationModal } from "./DonationModal";
 
-type Props = { streamId: string };
+type Props = { streamId: string; profile: UserProfile | null };
 
 function formatRemain(ms: number): string {
   const total = Math.max(0, Math.ceil(ms / 1000));
@@ -13,11 +15,12 @@ function formatRemain(ms: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function FloatingForkButton({ streamId }: Props) {
+export function FloatingForkButton({ streamId, profile }: Props) {
   const [cooldownUntil, setCooldownUntil] = useState<number>(0);
   const [now, setNow] = useState<number>(() => Date.now());
   const [pulse, setPulse] = useState(false);
   const [inputActive, setInputActive] = useState(false);
+  const [donationOpen, setDonationOpen] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // localStorage からクールダウン復元
@@ -105,27 +108,63 @@ export function FloatingForkButton({ streamId }: Props) {
   if (inputActive) return null;
 
   return (
-    <button
-      type="button"
-      onClick={handlePress}
-      disabled={isCoolingDown}
-      aria-label={isCoolingDown ? `音叉クールダウン残り ${formatRemain(remain)}` : "音叉を鳴らす"}
-      className={`fixed right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-colors ${
-        isCoolingDown
-          ? "cursor-not-allowed bg-neutral-700 text-neutral-400"
-          : "bg-amber-600 text-white hover:bg-amber-500 active:scale-95"
-      } ${pulse ? "ring-4 ring-amber-300/70" : ""}`}
-      style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
-    >
-      {isCoolingDown ? (
-        <span className="font-mono text-[11px] font-bold">
-          {formatRemain(remain)}
-        </span>
-      ) : (
-        <span className="text-2xl" aria-hidden>
-          🔔
-        </span>
+    <>
+      <div
+        className="fixed right-6 z-30 flex flex-col items-end gap-3"
+        style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      >
+        {/* 奉納音叉(金色サブ FAB) */}
+        {profile && (
+          <button
+            type="button"
+            onClick={() => setDonationOpen(true)}
+            aria-label="奉納音叉を鳴らす"
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-yellow-400 to-amber-600 text-white shadow-lg ring-2 ring-amber-200/50 transition-transform hover:scale-105 active:scale-95"
+          >
+            <span className="text-xs font-bold leading-tight" aria-hidden>
+              奉納
+              <br />
+              音叉
+            </span>
+          </button>
+        )}
+
+        {/* 無料音叉(既存 FAB) */}
+        <button
+          type="button"
+          onClick={handlePress}
+          disabled={isCoolingDown}
+          aria-label={
+            isCoolingDown
+              ? `音叉クールダウン残り ${formatRemain(remain)}`
+              : "音叉を鳴らす"
+          }
+          className={`flex h-14 w-14 items-center justify-center rounded-full shadow-lg transition-colors ${
+            isCoolingDown
+              ? "cursor-not-allowed bg-neutral-700 text-neutral-400"
+              : "bg-amber-600 text-white hover:bg-amber-500 active:scale-95"
+          } ${pulse ? "ring-4 ring-amber-300/70" : ""}`}
+        >
+          {isCoolingDown ? (
+            <span className="font-mono text-[11px] font-bold">
+              {formatRemain(remain)}
+            </span>
+          ) : (
+            <span className="text-2xl" aria-hidden>
+              🔔
+            </span>
+          )}
+        </button>
+      </div>
+
+      {profile && (
+        <DonationModal
+          open={donationOpen}
+          onClose={() => setDonationOpen(false)}
+          profile={profile}
+          streamId={streamId}
+        />
       )}
-    </button>
+    </>
   );
 }

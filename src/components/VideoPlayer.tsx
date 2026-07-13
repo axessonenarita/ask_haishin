@@ -10,6 +10,8 @@ import {
   type CSSProperties,
 } from "react";
 import { trackEvent } from "@/lib/analytics";
+import { getAvatarEmoji } from "@/lib/constants";
+import { tierForAmount } from "@/lib/donation";
 import { supabase } from "@/lib/supabase/client";
 import type { Stream } from "@/lib/types";
 import { getServerNow, useServerTime } from "@/lib/useServerTime";
@@ -87,6 +89,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   const [forkEffects, setForkEffects] = useState<
     { id: string; x: number }[]
   >([]);
+  const [donationEffects, setDonationEffects] = useState<
+    {
+      id: string;
+      amount: number;
+      nickname: string;
+      avatar: string;
+      body: string;
+    }[]
+  >([]);
   const recoveryAttemptsRef = useRef(0);
   const lastRecoveryAtRef = useRef(0);
   const exhaustedRef = useRef(false);
@@ -157,6 +168,41 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       window.setTimeout(() => {
         setForkEffects((es) => es.filter((e) => e.id !== id2));
       }, 2600);
+    });
+    channel.on("broadcast", { event: "donation_completed" }, (msg) => {
+      const p = msg.payload as {
+        amount?: number;
+        nickname?: string;
+        avatar?: string;
+        body?: string;
+      };
+      const amount = Number(p.amount ?? 0);
+      if (!Number.isFinite(amount) || amount <= 0) return;
+      const tier = tierForAmount(amount);
+      const id2 = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const item = {
+        id: id2,
+        amount,
+        nickname: String(p.nickname ?? ""),
+        avatar: String(p.avatar ?? ""),
+        body: String(p.body ?? ""),
+      };
+      setDonationEffects((es) => [...es, item]);
+      // ティアごとの表示秒数で自動退場
+      window.setTimeout(() => {
+        setDonationEffects((es) => es.filter((e) => e.id !== id2));
+      }, tier.bannerHoldSec * 1000);
+      // 動画上に飛ばす 🔔 の数はティアに応じて調整
+      for (let i = 0; i < tier.iconCount; i++) {
+        const iid = `${id2}-${i}`;
+        const x = Math.random() * 80 + 10;
+        window.setTimeout(() => {
+          setForkEffects((es) => [...es, { id: iid, x }]);
+          window.setTimeout(() => {
+            setForkEffects((es) => es.filter((e) => e.id !== iid));
+          }, 2600);
+        }, i * 120);
+      }
     });
     channel.subscribe();
     return () => {
@@ -844,6 +890,47 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
             </span>
           ))}
         </div>
+      )}
+
+      {donationEffects.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 top-2 z-[6] flex flex-col items-center gap-2 px-2">
+          {donationEffects.map((d) => {
+            const tier = tierForAmount(d.amount);
+            return (
+              <div
+                key={d.id}
+                className="w-full max-w-md animate-fadeIn rounded-lg px-3 py-2 shadow-lg"
+                style={{ backgroundColor: tier.color, color: tier.textColor }}
+              >
+                <div className="flex items-center gap-2 text-sm font-bold">
+                  <span aria-hidden>{getAvatarEmoji(d.avatar)}</span>
+                  <span className="truncate">{d.nickname}</span>
+                  <span className="ml-auto shrink-0 rounded bg-black/25 px-2 py-0.5 text-xs">
+                    {tier.label} 奉納
+                  </span>
+                </div>
+                {d.body && (
+                  <div className="mt-1 whitespace-pre-wrap break-words text-sm">
+                    {d.body}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {donationEffects.some(
+        (d) => tierForAmount(d.amount).hasFullscreenPulse,
+      ) && (
+        <div
+          className="pointer-events-none absolute inset-0 z-[4] animate-fadeIn"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, rgba(212,175,55,0.35) 0%, rgba(212,175,55,0) 70%)",
+          }}
+          aria-hidden
+        />
       )}
 
       {phase === "preRoll" && stream && (

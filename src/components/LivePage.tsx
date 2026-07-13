@@ -209,7 +209,7 @@ export function LivePage({ stream: initialStream }: Props) {
       )}
 
       {stream && !playbackEnded && (
-        <FloatingForkButton streamId={stream.id} />
+        <FloatingForkButton streamId={stream.id} profile={profile} />
       )}
     </div>
   );

@@ -11,6 +11,8 @@ export type Message = {
   deleted: boolean;
   pinned: boolean;
   stream_id: string | null;
+  fork_amount: number;
+  stripe_session_id: string | null;
 };
 
 export type UserProfile = {
