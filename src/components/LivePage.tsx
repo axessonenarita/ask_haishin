@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import type { Stream } from "@/lib/types";
 import { useProfile } from "@/lib/useProfile";
 import { Chat } from "./Chat";
+import { FloatingForkButton } from "./FloatingForkButton";
 import { InAppBrowserNotice } from "./InAppBrowserNotice";
 import { ProfileSetup } from "./ProfileSetup";
 import { StreamInfo } from "./StreamInfo";
@@ -205,6 +206,10 @@ export function LivePage({ stream: initialStream }: Props) {
           submitLabel="参加する"
           onSubmit={save}
         />
+      )}
+
+      {stream && !playbackEnded && (
+        <FloatingForkButton streamId={stream.id} />
       )}
     </div>
   );

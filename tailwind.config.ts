@@ -30,11 +30,17 @@ const config: Config = {
       },
       animation: {
         fadeIn: "fadeIn 0.7s ease-in both",
+        floatUp: "floatUp 2.5s ease-out forwards",
       },
       keyframes: {
         fadeIn: {
           "0%": { opacity: "0" },
           "100%": { opacity: "1" },
+        },
+        floatUp: {
+          "0%": { transform: "translateY(0) scale(0.8)", opacity: "0" },
+          "10%": { transform: "translateY(-10px) scale(1)", opacity: "1" },
+          "100%": { transform: "translateY(-200px) scale(1.1)", opacity: "0" },
         },
       },
     },

@@ -43,7 +43,10 @@ export const LS_KEYS = {
   avatar: "ask_haishin_avatar",
   color: "ask_haishin_color",
   lastPostAt: "ask_haishin_last_post_at",
+  forkCooldownAt: "ask_haishin_fork_cooldown_at",
 } as const;
+
+export const FORK_COOLDOWN_MS = 5 * 60 * 1000;
 
 export function getAvatarEmoji(id: string): string {
   return AVATARS.find((a) => a.id === id)?.emoji ?? "🐰";
