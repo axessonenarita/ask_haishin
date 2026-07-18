@@ -105,12 +105,15 @@ export function FloatingForkButton({ streamId, profile }: Props) {
   const remain = cooldownUntil - now;
   const isCoolingDown = remain > 0;
 
-  if (inputActive) return null;
+  // モーダルを開いている間は inputActive による FAB 非表示を無視する。
+  // (モーダル内のスライダーやテキストエリアに focus が入ると inputActive=true になり、
+  //  親コンポーネントごとアンマウントされて操作不能になる問題への対処)
+  const hideFabs = inputActive && !donationOpen;
 
   return (
     <>
       <div
-        className="fixed right-6 z-30 flex flex-col items-end gap-3"
+        className={`fixed right-6 z-30 flex flex-col items-end gap-3 ${hideFabs ? "hidden" : ""}`}
         style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
       >
         {/* 奉納音叉(金色サブ FAB) */}
