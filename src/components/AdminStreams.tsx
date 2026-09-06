@@ -14,6 +14,7 @@ import {
   VIEWER_COUNT_CONFIG,
   inflateViewerCount,
 } from "@/lib/viewerCount";
+import { HlsPreview } from "./HlsPreview";
 
 const STATUSES: StreamStatus[] = ["waiting", "live", "ended"];
 
@@ -45,8 +46,12 @@ function localInputToIso(local: string): string {
 }
 
 function defaultStartLocal(): string {
-  const d = new Date();
-  d.setMinutes(d.getMinutes() + 5);
+  const now = new Date();
+  const d = new Date(now);
+  d.setHours(21, 10, 0, 0);
+  if (d.getTime() <= now.getTime()) {
+    d.setDate(d.getDate() + 1);
+  }
   return isoToLocalInput(d.toISOString());
 }
 
@@ -73,6 +78,7 @@ export function AdminStreams() {
   const [submitting, setSubmitting] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
+  const [previewNewHls, setPreviewNewHls] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -286,6 +292,24 @@ export function AdminStreams() {
               placeholder="https://vz-xxxxxxxx.b-cdn.net/<video-guid>/playlist.m3u8"
               className="w-full rounded-md bg-bg-input px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500"
             />
+            <div className="mt-1.5 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewNewHls((v) => !v)}
+                disabled={!form.hls_url.trim()}
+                className="rounded bg-bg-input px-2 py-1 text-[11px] text-neutral-200 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {previewNewHls ? "▼ プレビューを閉じる" : "▶ プレビュー"}
+              </button>
+              <span className="text-[10px] text-neutral-500">
+                入力した URL を実際に再生して確認できます
+              </span>
+            </div>
+            {previewNewHls && (
+              <div className="mt-2 max-w-md">
+                <HlsPreview url={form.hls_url} />
+              </div>
+            )}
           </label>
 
           <div className="flex items-center gap-3 md:col-span-2">
@@ -425,6 +449,10 @@ function StreamCard({
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <DescriptionEditor stream={s} onChange={onUpdate} />
         <InflationEditor stream={s} onChange={onUpdate} />
+      </div>
+
+      <div className="mt-2">
+        <HlsPreviewSection url={s.hls_url} />
       </div>
 
       <div className="mt-2">
@@ -603,6 +631,29 @@ function StreamCommentPoster({ stream }: { stream: Stream }) {
           stream_id: <code className="rounded bg-bg-input px-1">{stream.id.slice(0, 8)}</code>
         </p>
       </form>
+    </details>
+  );
+}
+
+function HlsPreviewSection({ url }: { url: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <details
+      className="rounded-md border border-bg-border bg-bg-input/40 px-3 py-2"
+      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
+    >
+      <summary className="cursor-pointer text-[11px] text-neutral-300">
+        ▶ 再生プレビュー
+        <span className="ml-2 text-[10px] text-neutral-500">
+          (開くと HLS を読み込み)
+        </span>
+      </summary>
+      {open && (
+        <div className="mt-2 max-w-md">
+          <HlsPreview url={url} />
+        </div>
+      )}
     </details>
   );
 }
