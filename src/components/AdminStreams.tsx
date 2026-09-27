@@ -48,7 +48,7 @@ function localInputToIso(local: string): string {
 function defaultStartLocal(): string {
   const now = new Date();
   const d = new Date(now);
-  d.setHours(21, 10, 0, 0);
+  d.setHours(21, 0, 0, 0);
   if (d.getTime() <= now.getTime()) {
     d.setDate(d.getDate() + 1);
   }
