@@ -93,6 +93,9 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
   // hls.js の autoLevelCapping を保持(-1 = 制限なし)。再生落ち時に
   // 段階的に下げ、再起動を跨いでも適用するため ref で持つ
   const autoLevelCapRef = useRef<number>(-1);
+  // メイン配信動画の長さ(秒)。postRoll を全視聴者で同期させるため、
+  // 「開始時刻 + メイン動画の長さ」を postRoll の共通アンカーにする
+  const mainDurationRef = useRef<number | null>(null);
 
   useEffect(() => {
     setMainEnded(false);
@@ -105,6 +108,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     lastRecoveryAtRef.current = 0;
     exhaustedRef.current = false;
     autoLevelCapRef.current = -1;
+    mainDurationRef.current = null;
   }, [stream?.id]);
 
   useEffect(() => {
@@ -206,6 +210,8 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     } else if (phase === "preRoll") {
       anchorMs = startAtMs - PRE_ROLL_LEAD_MS;
       isLoop = true;
+    } else if (phase === "postRoll" && mainDurationRef.current !== null) {
+      anchorMs = startAtMs + mainDurationRef.current * 1000;
     } else {
       return null;
     }
@@ -382,8 +388,14 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       syncMode = "loop";
       syncAnchorMs = startAtMs - PRE_ROLL_LEAD_MS;
     } else if (phase === "postRoll") {
-      // postRoll は 1 回だけ再生して ended に遷移する(同期もループもしない)
+      // postRoll は 1 回だけ再生して ended に遷移する(ループしない)。
+      // メイン動画の長さが分かっていれば「開始時刻 + メイン動画の長さ」を
+      // アンカーに同期し、視聴者ごとのメイン終了タイミングのズレを吸収する
       src = INTERVAL_VIDEO_URL;
+      if (mainDurationRef.current !== null) {
+        syncMode = "live";
+        syncAnchorMs = startAtMs + mainDurationRef.current * 1000;
+      }
     } else {
       src = INTERVAL_VIDEO_URL;
     }
@@ -401,8 +413,16 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       return elapsed;
     };
 
+    const recordMainDuration = () => {
+      if (phase !== "live") return;
+      const d = video.duration;
+      if (Number.isFinite(d) && d > 0) mainDurationRef.current = d;
+    };
+    video.addEventListener("durationchange", recordMainDuration);
+
     const handleEnded = () => {
       if (phase === "live") {
+        recordMainDuration();
         setMainEnded(true);
         setMainEndedAt(Date.now());
       } else if (phase === "postRoll") {
@@ -763,6 +783,15 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
         const seekToTarget = () => {
           const target = computeTarget();
           if (target !== null && Number.isFinite(target)) {
+            // postRoll の同期位置がすでに曲の終わりを過ぎていれば終了扱い
+            if (
+              phase === "postRoll" &&
+              Number.isFinite(video.duration) &&
+              target >= video.duration - 0.5
+            ) {
+              setPostRollEnded(true);
+              return;
+            }
             video.currentTime = target;
           }
         };
@@ -806,6 +835,7 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (resetCounterTimer) clearTimeout(resetCounterTimer);
       if (hlsInstance) hlsInstance.destroy();
       video.removeEventListener("ended", handleEnded);
+      video.removeEventListener("durationchange", recordMainDuration);
       video.removeEventListener("seeked", handleSeeked);
       video.removeEventListener("pause", handlePause);
       video.removeEventListener("waiting", handleWaiting);
