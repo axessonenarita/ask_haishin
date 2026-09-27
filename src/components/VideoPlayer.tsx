@@ -26,6 +26,10 @@ const MANIFEST_WAIT_MS = 5000;
 const PLAY_RETRY_DELAY_MS = 400;
 const STALL_CHECK_INTERVAL_MS = 2000;
 const STALL_THRESHOLD_MS = 15000;
+// 音声は進むのに映像フレームが増えない状態がこの時間続いたらシークで促す
+const FROZEN_NUDGE_AFTER_MS = 4000;
+// シーク後もこの時間フレームが増えなければプレーヤーを作り直す
+const FROZEN_RECOVER_AFTER_NUDGE_MS = 8000;
 const RECOVERY_RESET_AFTER_MS = 30000;
 const RECOVERY_COOLDOWN_MS = 1500;
 const MAX_RECOVERY_ATTEMPTS = 3;
@@ -476,15 +480,108 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
     let lastProgressAt = Date.now();
     const isHidden = (): boolean =>
       typeof document !== "undefined" && document.visibilityState === "hidden";
-    const handleVisibilityChange = () => {
+
+    // 映像フリーズ検知: Chrome は裏タブで映像デコードだけ止めて音声を流し続ける。
+    // 復帰後に映像が再開しないことがあり、その間も currentTime は進むので
+    // 上の stall 検知では拾えない。デコード済みフレーム数の増加で判定する
+    const getDecodedFrames = (): number | null => {
+      if (typeof video.getVideoPlaybackQuality !== "function") return null;
+      return video.getVideoPlaybackQuality().totalVideoFrames;
+    };
+    let lastDecodedFrames = getDecodedFrames();
+    let frozenSince: number | null = null;
+    let nudgedAt: number | null = null;
+    const resetFrozenCheck = () => {
+      lastDecodedFrames = getDecodedFrames();
+      frozenSince = null;
+      nudgedAt = null;
+    };
+
+    // 同位置(ずれが大きければ同期位置)へシークしてデコーダを立て直させる
+    const nudgeDecoder = () => {
+      if (cancelled) return;
+      if (video.paused || video.ended || video.error) return;
+      if (video.readyState < 2) return;
+      let to = video.currentTime;
+      if (syncMode !== "none") {
+        const target = computeTarget();
+        if (target !== null) {
+          let diff = target - video.currentTime;
+          if (syncMode === "loop") {
+            const duration = video.duration;
+            if (Math.abs(diff) > duration / 2) {
+              diff = diff > 0 ? diff - duration : diff + duration;
+            }
+          }
+          if (Math.abs(diff) > RESYNC_THRESHOLD_S) to = Math.max(0, target);
+        }
+      }
+      video.currentTime = to;
+    };
+
+    const handleResume = () => {
+      if (isHidden()) return;
       // タブに戻ってきた直後は currentTime の進みが遅れるので
       // stall タイマーをリセットして誤検知を避ける
       lastProgressTime = video.currentTime;
       lastProgressAt = Date.now();
+      resetFrozenCheck();
+      nudgeDecoder();
+    };
+    const handleVisibilityChange = () => {
+      if (isHidden()) {
+        lastProgressTime = video.currentTime;
+        lastProgressAt = Date.now();
+        resetFrozenCheck();
+        return;
+      }
+      handleResume();
     };
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", handleVisibilityChange);
+      // Page Lifecycle API: freeze されたタブの復帰
+      document.addEventListener("resume", handleResume);
     }
+    if (typeof window !== "undefined") {
+      window.addEventListener("pageshow", handleResume);
+    }
+
+    // currentTime は進んでいる前提で、映像フレームも進んでいるかを判定。
+    // 固まっていれば一度シークで促し、それでも駄目なら full recovery
+    const checkFrozenFrames = (): boolean => {
+      const frames = getDecodedFrames();
+      if (
+        frames === null ||
+        video.videoWidth === 0 ||
+        lastDecodedFrames === null ||
+        frames === 0 ||
+        frames > lastDecodedFrames
+      ) {
+        lastDecodedFrames = frames;
+        frozenSince = null;
+        nudgedAt = null;
+        return false;
+      }
+      const t = Date.now();
+      if (frozenSince === null) frozenSince = t;
+      if (nudgedAt === null) {
+        if (t - frozenSince >= FROZEN_NUDGE_AFTER_MS) {
+          nudgedAt = t;
+          nudgeDecoder();
+        }
+      } else if (t - nudgedAt >= FROZEN_RECOVER_AFTER_NUDGE_MS) {
+        const frozenForMs = t - frozenSince;
+        resetFrozenCheck();
+        triggerFullRecovery("video-frozen", {
+          currentTime: video.currentTime,
+          decodedFrames: frames,
+          frozenForMs,
+          readyState: video.readyState,
+          videoWidth: video.videoWidth,
+        });
+      }
+      return true;
+    };
     // 連続して進行が確認できたチェック回数。一定回数を超えたら
     // recoveryAttemptsRef を 0 に戻す(別ハンドラの handlePlaying 経由
     // よりも確実)
@@ -497,17 +594,24 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
       if (isHidden()) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
+        resetFrozenCheck();
         return;
       }
       if (video.paused || video.ended || video.error) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
         consecutiveProgressChecks = 0;
+        resetFrozenCheck();
         return;
       }
       if (video.currentTime > lastProgressTime + 0.1) {
         lastProgressTime = video.currentTime;
         lastProgressAt = Date.now();
+        if (checkFrozenFrames()) {
+          // 音声だけ進んで映像が止まっている間は「正常進行」に数えない
+          consecutiveProgressChecks = 0;
+          return;
+        }
         consecutiveProgressChecks++;
         if (
           consecutiveProgressChecks >= PROGRESS_CHECKS_TO_RESET &&
@@ -713,6 +817,10 @@ export function VideoPlayer({ stream, playbackEnded, onPlaybackEnded }: Props) {
           "visibilitychange",
           handleVisibilityChange,
         );
+        document.removeEventListener("resume", handleResume);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pageshow", handleResume);
       }
       setLoading(false);
       video.loop = false;
