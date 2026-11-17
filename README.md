@@ -88,3 +88,39 @@ Bunny 側で HLS 変換・CDN 配信・CORS（`Access-Control-Allow-Origin: *`�
 - 運営 / STAFF バッジ
 - 設定変更ボタンで再設定可能
 - 削除は物理削除ではなく `deleted = true`
+
+## 祝詞アプリ（/norito）
+
+ホーム画面に置いて使うウェブアプリ（PWA）。祝詞を音声に合わせて唱えて回数を数える、奏上会の予定と通知、週1回の便り、弥栄の記をもとにした動画の目録、サロンの新着の題名を出す。チャット・コメント・ログインはない。
+
+- `/norito` — だれでも開ける
+- `/norito/m/<鍵>` — 会員用URL。会員限定（`members_only`）の祝詞と動画も出る。鍵は管理画面「祝詞アプリ → 設定・会員用URL」で作る。ここから「ホーム画面に追加」すると、ホーム画面のアプリも会員用URLで開く
+- `/admin` の「祝詞アプリ」タブ — 便り（載せると通知）、特別な予定、祝詞・動画・新着の JSON 一括登録、会員用URL、数
+
+### 始めるときの設定
+
+1. Supabase SQL Editor で `supabase/migrations/0008_norito_app.sql` を実行
+2. 通知の鍵を作る：`npx web-push generate-vapid-keys`。Vercel の環境変数に `NEXT_PUBLIC_VAPID_PUBLIC_KEY`・`VAPID_PRIVATE_KEY`・`VAPID_SUBJECT`（`mailto:` の連絡先）を入れて再デプロイ
+3. 奏上会前の自動通知：`CRON_SECRET` を決めて Vercel に入れ、`/api/norito/cron` を5分おきに呼ぶ。Vercel の無料プランの Cron は1日1回までなので、Supabase の pg_cron で呼ぶ：
+
+   ```sql
+   create extension if not exists pg_cron;
+   create extension if not exists pg_net;
+   select cron.schedule('norito-reminder', '*/5 * * * *', $$
+     select net.http_get(
+       url := 'https://ask-haishin.vercel.app/api/norito/cron',
+       headers := jsonb_build_object('Authorization', 'Bearer <CRON_SECRET>')
+     );
+   $$);
+   ```
+
+   土日21:00の15分前〜5分後に呼ばれた最初の1回で送る。日曜（サロン）の通知は、既定では会員用URLから通知をオンにした端末にだけ送る
+4. 管理画面で会員用URLを作り、サロンの中だけでお知らせする。祝詞（本文と音声URL）と動画の目録を入れる
+
+### 数えているもの
+
+`norito_hits` に端末ごとのランダムな ID で記録する（名前・メールは持たない）。`open`（開いた）、`standalone`（ホーム画面から開いた）、`push_on`（通知オン）は同じ端末で1日1回まで、`salon_click`（「サロンを開く」などで DMM へ移った）は押した回数。DMM 側で入会経路は見えないので、`salon_click` とその週の入会数を並べて見る。
+
+### 祝詞の本文の書き方
+
+1行1句。行頭に `12.5|` と書くと、音声のその秒でその行が光る。書かない行は文字数で按分する。音声は公開リポジトリに入れず、Bunny などに置いて URL を入れる。音声が終わるたびに1回と数え、「くり返す」がオンなら目標回数まで続ける。回数は端末の中（localStorage）だけに残る。

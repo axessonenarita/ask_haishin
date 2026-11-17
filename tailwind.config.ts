@@ -5,6 +5,17 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // 祝詞アプリ（/norito）用：夜の紺と金
+        nr: {
+          bg: "#10131e",
+          panel: "#171b29",
+          raised: "#1e2334",
+          line: "#2a3047",
+          text: "#ece6d6",
+          muted: "#9a9fb0",
+          gold: "#c9a35a",
+          goldSoft: "#3a3020",
+        },
         bg: {
           base: "#0f0f10",
           panel: "#181818",
@@ -27,6 +38,9 @@ const config: Config = {
           pink: "#ec4899",
           black: "#9ca3af",
         },
+      },
+      fontFamily: {
+        mincho: ['"Hiragino Mincho ProN"', '"Yu Mincho"', '"YuMincho"', '"Noto Serif JP"', "serif"],
       },
       animation: {
         fadeIn: "fadeIn 0.7s ease-in both",

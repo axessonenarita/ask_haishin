@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { AdminMessages } from "./AdminMessages";
+import { AdminNorito } from "./AdminNorito";
 import { AdminStreams } from "./AdminStreams";
 import { SentryTestPanel } from "./SentryTestPanel";
 
-type Tab = "streams" | "messages" | "settings";
+type Tab = "streams" | "messages" | "norito" | "settings";
 
 const TABS: { id: Tab; label: string; emoji: string }[] = [
   { id: "streams", label: "配信", emoji: "📺" },
   { id: "messages", label: "コメント", emoji: "💬" },
+  { id: "norito", label: "祝詞アプリ", emoji: "⛩️" },
   { id: "settings", label: "設定", emoji: "⚙️" },
 ];
 
@@ -44,6 +46,7 @@ export function AdminPanel() {
       <main className="mx-auto max-w-6xl px-4 py-6 md:px-6">
         {tab === "streams" && <AdminStreams />}
         {tab === "messages" && <AdminMessages />}
+        {tab === "norito" && <AdminNorito />}
         {tab === "settings" && <SentryTestPanel />}
       </main>
     </div>
